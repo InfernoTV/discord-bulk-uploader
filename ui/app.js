@@ -27,6 +27,11 @@ const state = {
 const dom = {
   accentSwatches: document.getElementById('accent-swatches'),
   customAccentPicker: document.getElementById('custom-accent-picker'),
+  paletteToggleBtn: document.getElementById('palette-toggle-btn'),
+  colorPopover: document.getElementById('color-popover'),
+  popoverSwatches: document.getElementById('popover-swatches'),
+  customHexInput: document.getElementById('custom-hex-input'),
+  pickerPreviewCircle: document.getElementById('picker-preview-circle'),
 
   tokenInput: document.getElementById('token-input'),
   toggleTokenBtn: document.getElementById('toggle-token-btn'),
@@ -431,6 +436,7 @@ function darkenColor(hex, factor) {
 
 function setAccentColor(hex) {
   if (!hex) return;
+  if (!hex.startsWith('#')) hex = '#' + hex;
   document.documentElement.style.setProperty('--accent', hex);
   document.documentElement.style.setProperty('--accent-dim', hexToRgba(hex, 0.16));
   document.documentElement.style.setProperty('--accent-glow', hexToRgba(hex, 0.38));
@@ -447,8 +453,22 @@ function setAccentColor(hex) {
     });
   }
 
+  if (dom.popoverSwatches) {
+    dom.popoverSwatches.querySelectorAll('.swatch-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-color').toLowerCase() === hex.toLowerCase());
+    });
+  }
+
   if (dom.customAccentPicker) {
     dom.customAccentPicker.value = hex;
+  }
+
+  if (dom.customHexInput) {
+    dom.customHexInput.value = hex.toUpperCase();
+  }
+
+  if (dom.pickerPreviewCircle) {
+    dom.pickerPreviewCircle.style.background = hex;
   }
 }
 
@@ -457,6 +477,39 @@ if (dom.accentSwatches) {
     btn.addEventListener('click', () => {
       setAccentColor(btn.getAttribute('data-color'));
     });
+  });
+}
+
+if (dom.paletteToggleBtn && dom.colorPopover) {
+  dom.paletteToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dom.colorPopover.classList.toggle('open');
+  });
+
+  dom.colorPopover.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  document.addEventListener('click', () => {
+    dom.colorPopover.classList.remove('open');
+  });
+}
+
+if (dom.popoverSwatches) {
+  dom.popoverSwatches.querySelectorAll('.swatch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setAccentColor(btn.getAttribute('data-color'));
+    });
+  });
+}
+
+if (dom.customHexInput) {
+  dom.customHexInput.addEventListener('input', (e) => {
+    let val = e.target.value.trim();
+    if (!val.startsWith('#')) val = '#' + val;
+    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+      setAccentColor(val);
+    }
   });
 }
 

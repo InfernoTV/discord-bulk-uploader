@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
   <title>BulkCord Uploader</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,8 +12,8 @@
 </head>
 <body>
   <!-- Ambient Noise and Lighting Shroud -->
-  <div class="ambient-glow glow-top-left"></div>
-  <div class="ambient-glow glow-bottom-right"></div>
+  <div class="ambient-glow glow-top-left" id="ambient-top-left"></div>
+  <div class="ambient-glow glow-bottom-right" id="ambient-bottom-right"></div>
 
   <!-- App Root -->
   <div class="app-root">
@@ -41,22 +42,51 @@
           <div class="swatch-group" id="accent-swatches">
             <button type="button" class="swatch-btn active" data-color="#FFC72C" title="Ayran Gold" style="--swatch:#FFC72C;"></button>
             <button type="button" class="swatch-btn" data-color="#00F0FF" title="Cyber Cyan" style="--swatch:#00F0FF;"></button>
-            <button type="button" class="swatch-btn" data-color="#A855F7" title="Electric Violet" style="--swatch:#A855F7;"></button>
             <button type="button" class="swatch-btn" data-color="#10B981" title="Emerald Green" style="--swatch:#10B981;"></button>
+            <button type="button" class="swatch-btn" data-color="#A855F7" title="Electric Violet" style="--swatch:#A855F7;"></button>
             <button type="button" class="swatch-btn" data-color="#EF4444" title="Crimson" style="--swatch:#EF4444;"></button>
             <button type="button" class="swatch-btn" data-color="#F43F5E" title="Rose Pink" style="--swatch:#F43F5E;"></button>
             <button type="button" class="swatch-btn" data-color="#5865F2" title="Discord Blurple" style="--swatch:#5865F2;"></button>
           </div>
-          <label class="custom-color-btn" title="Choose Custom Accent Color">
-            <input type="color" id="custom-accent-picker" value="#FFC72C">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
-              <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
-              <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
-              <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
-              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-            </svg>
-          </label>
+          
+          <div class="custom-color-wrapper">
+            <button type="button" class="custom-color-btn" id="palette-toggle-btn" title="Open Dark Palette Popover">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+                <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+                <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+                <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+              </svg>
+            </button>
+
+            <!-- Dark Mode In-App Palette Popover -->
+            <div class="color-popover" id="color-popover">
+              <div class="popover-header font-mono">ACCENT PALETTE</div>
+              <div class="popover-grid" id="popover-swatches">
+                <button type="button" class="swatch-btn" data-color="#FFC72C" title="Ayran Gold" style="--swatch:#FFC72C;"></button>
+                <button type="button" class="swatch-btn" data-color="#00F0FF" title="Cyber Cyan" style="--swatch:#00F0FF;"></button>
+                <button type="button" class="swatch-btn" data-color="#10B981" title="Emerald Green" style="--swatch:#10B981;"></button>
+                <button type="button" class="swatch-btn" data-color="#84CC16" title="Acid Lime" style="--swatch:#84CC16;"></button>
+                <button type="button" class="swatch-btn" data-color="#A855F7" title="Electric Violet" style="--swatch:#A855F7;"></button>
+                <button type="button" class="swatch-btn" data-color="#F43F5E" title="Rose Pink" style="--swatch:#F43F5E;"></button>
+                <button type="button" class="swatch-btn" data-color="#EF4444" title="Crimson Red" style="--swatch:#EF4444;"></button>
+                <button type="button" class="swatch-btn" data-color="#F97316" title="Sunset Orange" style="--swatch:#F97316;"></button>
+                <button type="button" class="swatch-btn" data-color="#5865F2" title="Discord Blurple" style="--swatch:#5865F2;"></button>
+                <button type="button" class="swatch-btn" data-color="#38BDF8" title="Ice Blue" style="--swatch:#38BDF8;"></button>
+                <button type="button" class="swatch-btn" data-color="#EC4899" title="Neon Magenta" style="--swatch:#EC4899;"></button>
+                <button type="button" class="swatch-btn" data-color="#E2E8F0" title="Pure Silver" style="--swatch:#E2E8F0;"></button>
+              </div>
+              <div class="popover-custom-row">
+                <span class="font-mono custom-label">HEX:</span>
+                <input type="text" id="custom-hex-input" class="font-mono hex-input" value="#FFC72C" maxlength="7" spellcheck="false">
+                <label class="native-picker-wrap" title="Native Color Picker">
+                  <input type="color" id="custom-accent-picker" value="#FFC72C">
+                  <span class="color-preview-circle" id="picker-preview-circle"></span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="status-indicator-pill" id="global-status-pill">

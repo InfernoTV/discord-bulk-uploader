@@ -17,6 +17,7 @@
 }
 
 :root {
+  color-scheme: dark;
   /* Ayran Palette Tokens */
   --ink: #0A0A0D;
   --ink-raised: #111116;
@@ -189,7 +190,7 @@ html, body {
   padding: 2px 7px;
   background: var(--accent-dim);
   color: var(--accent);
-  border: 1px solid rgba(255, 199, 44, 0.3);
+  border: 1px solid var(--accent-glow);
   border-radius: var(--radius-xs);
   letter-spacing: 0.05em;
   font-family: var(--font-mono);
@@ -246,27 +247,123 @@ html, body {
   box-shadow: 0 0 8px var(--swatch);
 }
 
-.custom-color-btn {
+.custom-color-wrapper {
   position: relative;
+}
+
+.custom-color-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--surface-2);
   border: 1px solid var(--hairline-bright);
   color: var(--accent);
   cursor: pointer;
   margin-left: 2px;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: all 0.15s ease;
+  padding: 0;
 }
 
 .custom-color-btn:hover {
   border-color: var(--accent);
+  transform: scale(1.1);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
-.custom-color-btn input[type="color"] {
+/* Dark Mode In-App Color Popover */
+.color-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 220px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 1px 0 0 rgba(255, 255, 255, 0.06) inset;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 100;
+}
+
+.color-popover.open {
+  display: flex;
+  animation: popover-slide-in 0.15s ease-out;
+}
+
+@keyframes popover-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.popover-header {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 6px;
+}
+
+.popover-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  justify-items: center;
+}
+
+.popover-grid .swatch-btn {
+  width: 18px;
+  height: 18px;
+}
+
+.popover-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.custom-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.hex-input {
+  flex: 1;
+  height: 26px !important;
+  background: var(--ink) !important;
+  border: 1px solid var(--hairline) !important;
+  border-radius: 4px !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  color: var(--text-primary) !important;
+  text-transform: uppercase;
+}
+
+.hex-input:focus {
+  border-color: var(--accent) !important;
+}
+
+.native-picker-wrap {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.native-picker-wrap input[type="color"] {
   position: absolute;
   opacity: 0;
   width: 100%;
@@ -274,6 +371,16 @@ html, body {
   cursor: pointer;
   left: 0;
   top: 0;
+}
+
+.color-preview-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid var(--hairline-bright);
+  box-shadow: 0 0 6px var(--accent-glow);
+  display: block;
 }
 
 /* Status Indicator Pill */
@@ -359,8 +466,8 @@ html, body {
 }
 
 .card-glow.active-transmitting {
-  border-color: rgba(255, 199, 44, 0.4);
-  box-shadow: 0 1px 0 0 rgba(255, 199, 44, 0.2) inset, 0 0 24px rgba(255, 199, 44, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent-dim) inset, 0 0 24px var(--accent-glow);
 }
 
 .card-header {
@@ -387,7 +494,7 @@ html, body {
   font-weight: 700;
   color: var(--accent);
   background: var(--accent-dim);
-  border: 1px solid rgba(255, 199, 44, 0.2);
+  border: 1px solid var(--accent-glow);
   padding: 2px 6px;
   border-radius: 4px;
   letter-spacing: 0.05em;
@@ -567,7 +674,8 @@ select:disabled {
   --laser-angle: 0deg;
   border: 1.5px solid transparent;
   background:
-    linear-gradient(#1E1A11, #1E1A11) padding-box,
+    linear-gradient(var(--accent-dim), var(--accent-dim)) padding-box,
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
     conic-gradient(
         from var(--laser-angle),
         transparent 0%,
@@ -579,12 +687,13 @@ select:disabled {
       ) border-box;
   animation: laser-rotate 2.8s linear infinite;
   color: var(--accent);
-  box-shadow: 0 2px 12px rgba(255, 199, 44, 0.15);
+  box-shadow: 0 2px 14px var(--accent-glow);
 }
 
 .btn-laser:hover:not(:disabled) {
   background:
-    linear-gradient(#2A2417, #2A2417) padding-box,
+    linear-gradient(var(--accent-dim), var(--accent-dim)) padding-box,
+    linear-gradient(var(--surface-sel), var(--surface-sel)) padding-box,
     conic-gradient(
         from var(--laser-angle),
         transparent 0%,
@@ -595,7 +704,7 @@ select:disabled {
         transparent 100%
       ) border-box;
   color: #FFFFFF;
-  box-shadow: 0 4px 18px var(--accent-glow);
+  box-shadow: 0 4px 22px var(--accent-glow), 0 0 12px var(--accent-dim);
   transform: translateY(-1px);
 }
 
@@ -844,7 +953,7 @@ select:disabled {
   background: var(--accent);
   color: var(--ink);
   font-weight: 800;
-  box-shadow: 0 1px 6px rgba(255, 199, 44, 0.4);
+  box-shadow: 0 0 14px var(--accent-glow), 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* Range Slider */
@@ -1182,8 +1291,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-item.active {
   border-color: var(--accent);
-  background: rgba(255, 199, 44, 0.08);
-  box-shadow: 0 0 12px rgba(255, 199, 44, 0.15);
+  background: var(--accent-dim);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .queue-item-left {
@@ -1254,7 +1363,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-pill.sending {
   background: var(--accent-dim);
-  border: 1px solid rgba(255, 199, 44, 0.4);
+  border: 1px solid var(--accent);
   color: var(--accent);
   animation: pill-pulse 1.4s infinite;
 }
