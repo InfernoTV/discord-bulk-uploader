@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkCord Uploader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- App Container -->
+  <div class="app-root">
+
+    <!-- Top Navigation / Titlebar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" fill="#5865F2"/>
+            <path d="M12 12v6m0-6l-2.5 2.5m2.5-2.5l2.5 2.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">BulkCord Uploader</span>
+          <span class="brand-version">v2.2 Native</span>
+        </div>
+      </div>
+
+      <div class="topbar-status">
+        <div class="status-indicator-pill" id="global-status-pill">
+          <span class="status-dot" id="global-status-dot"></span>
+          <span class="status-text" id="global-status-text">Engine Standby</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace-grid">
+
+      <!-- LEFT COLUMN: CONTROLS & CONFIGURATION -->
+      <section class="panel-left">
+
+        <!-- 1. Authentication -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">1</span>
+            <h2 class="card-title">AUTHENTICATION</h2>
+          </div>
+          <div class="card-body">
+            <div class="input-group">
+              <div class="input-with-action">
+                <input type="password" id="token-input" placeholder="Paste Discord Bot or User Token..." autocomplete="off" spellcheck="false">
+                <button type="button" class="btn-icon" id="toggle-token-btn" title="Toggle Visibility">👁</button>
+              </div>
+              <button type="button" class="btn btn-primary" id="verify-token-btn">Verify Token</button>
+            </div>
+            <div class="auth-meta">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="is-bot-chk" checked>
+                <span class="checkbox-box"></span>
+                <span class="checkbox-label">Bot Token (prepends <code>Bot </code> prefix)</span>
+              </label>
+              <div class="auth-badge" id="auth-badge">
+                <span class="badge-dot"></span>
+                <span class="badge-text" id="auth-badge-text">Not Authenticated</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Destination Channel -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">2</span>
+            <h2 class="card-title">DESTINATION CHANNEL & SERVER</h2>
+          </div>
+          <div class="card-body">
+            <div class="input-group">
+              <input type="text" id="channel-input" placeholder="Channel ID or Paste Link (discord.com/channels/...)" spellcheck="false">
+              <button type="button" class="btn btn-secondary" id="verify-chan-btn">Verify Channel</button>
+            </div>
+            <div class="input-group mt-2">
+              <input type="text" id="guild-input" placeholder="Server ID (Optional for channel tree dropdown)" spellcheck="false">
+              <button type="button" class="btn btn-secondary" id="fetch-channels-btn">Fetch Channels</button>
+            </div>
+            <div class="dropdown-group mt-2">
+              <select id="channel-select" disabled>
+                <option value="">-- Enter Server ID and click Fetch --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. File Source -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">3</span>
+            <h2 class="card-title">FILE SOURCE DIRECTORY</h2>
+          </div>
+          <div class="card-body">
+            <div class="input-group">
+              <input type="text" id="folder-input" placeholder="Select or drop folder containing images..." spellcheck="false">
+              <button type="button" class="btn btn-secondary" id="browse-folder-btn">📁 Browse...</button>
+            </div>
+            <div class="filter-row mt-2">
+              <select id="filter-select">
+                <option value="All Images">All Images (.png, .jpg, .webp, .gif)</option>
+                <option value="PNG Only">PNG Only (*.png)</option>
+                <option value="WebP Only">WebP Only (*.webp)</option>
+                <option value="All Files">All Files (*.*)</option>
+              </select>
+              <div class="file-summary" id="file-summary-text">No folder selected</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Batch Packing & Rate Limiting -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">4</span>
+            <h2 class="card-title">BATCH PACKING & RATE LIMIT TIMING</h2>
+          </div>
+          <div class="card-body">
+            <div class="slider-header">
+              <span class="slider-title">Batch Size (Attachments per Discord Message):</span>
+              <span class="badge-value" id="batch-val-badge">4 files / msg</span>
+            </div>
+            <!-- Segmented button 1 to 10 -->
+            <div class="segmented-control" id="batch-segmented">
+              <button type="button" data-val="1">1</button>
+              <button type="button" data-val="2">2</button>
+              <button type="button" data-val="3">3</button>
+              <button type="button" data-val="4" class="active">4</button>
+              <button type="button" data-val="5">5</button>
+              <button type="button" data-val="6">6</button>
+              <button type="button" data-val="7">7</button>
+              <button type="button" data-val="8">8</button>
+              <button type="button" data-val="9">9</button>
+              <button type="button" data-val="10">10</button>
+            </div>
+            <div class="card-subnote" id="batch-note">
+              ⚡ Groups 4 images into a Discord 2x2 mosaic. Slices dynamically mid-upload.
+            </div>
+
+            <!-- Delay Slider -->
+            <div class="slider-header mt-3">
+              <span class="slider-title">Delay Between Messages:</span>
+              <span class="badge-value text-green" id="delay-val-badge">2.5s (Safe Default)</span>
+            </div>
+            <div class="slider-wrapper">
+              <input type="range" id="delay-slider" min="0.5" max="10.0" step="0.5" value="2.5">
+            </div>
+            <div class="card-subnote">
+              🛡️ Automatic 429 backoff: If Discord issues a rate-limit, transmission pauses and resumes safely.
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Controls & Live Telemetry -->
+        <div class="card card-glow">
+          <div class="card-header">
+            <span class="card-num">5</span>
+            <h2 class="card-title">EXECUTION CONTROLS & TELEMETRY</h2>
+          </div>
+          <div class="card-body">
+            <!-- Buttons -->
+            <div class="action-buttons">
+              <button type="button" class="btn btn-success btn-lg" id="start-btn">▶ Start Transmission</button>
+              <button type="button" class="btn btn-warning" id="pause-btn" disabled>⏸ Pause</button>
+              <button type="button" class="btn btn-danger" id="stop-btn" disabled>⏹ Stop</button>
+            </div>
+
+            <!-- Telemetry HUD -->
+            <div class="telemetry-hud">
+              <div class="hud-pill">
+                <span class="hud-icon">⏱</span>
+                <span class="hud-label">ETA</span>
+                <span class="hud-value" id="hud-eta">--:--</span>
+              </div>
+              <div class="hud-pill">
+                <span class="hud-icon">⚡</span>
+                <span class="hud-label">SPEED</span>
+                <span class="hud-value" id="hud-speed">0.0 f/s</span>
+              </div>
+              <div class="hud-pill">
+                <span class="hud-icon">📦</span>
+                <span class="hud-label">SENT</span>
+                <span class="hud-value" id="hud-sent">0 / 0</span>
+              </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-fill">
+                  <div class="progress-shimmer"></div>
+                </div>
+              </div>
+              <div class="progress-footer">
+                <span class="status-msg" id="status-msg">Status: Ready to upload</span>
+                <span class="progress-pct" id="progress-pct">0%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- RIGHT COLUMN: DISCORD CLIENT MOSAIC PREVIEW, QUEUE & CONSOLE -->
+      <section class="panel-right">
+
+        <!-- 1. Discord Client Simulation -->
+        <div class="card">
+          <div class="card-header justify-between">
+            <div class="flex-align">
+              <span class="card-dot"></span>
+              <h2 class="card-title">DISCORD CLIENT PREVIEW (EXACT MOSAIC ENGINE)</h2>
+            </div>
+            <span class="preview-badge" id="mosaic-badge">4-Item 2x2 Grid</span>
+          </div>
+          <div class="card-body">
+            <!-- Discord Message Mock -->
+            <div class="discord-message">
+              <div class="discord-header">
+                <div class="discord-avatar" id="discord-avatar">🤖</div>
+                <div class="discord-user-info">
+                  <span class="discord-username" id="discord-username">BulkCord Bot</span>
+                  <span class="discord-bot-badge">BOT</span>
+                  <span class="discord-timestamp" id="discord-time">Today at 12:00 PM</span>
+                </div>
+              </div>
+
+              <!-- Discord Dynamic Mosaic Container -->
+              <div class="discord-mosaic-wrapper" id="discord-mosaic-grid">
+                <!-- Dynamically generated image tiles -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. File Transmission Queue -->
+        <div class="card flex-grow">
+          <div class="card-header justify-between">
+            <div class="flex-align">
+              <span class="card-dot"></span>
+              <h2 class="card-title">TRANSMISSION ASSET QUEUE</h2>
+            </div>
+            <span class="queue-count-badge" id="queue-count-badge">0 Assets</span>
+          </div>
+          <div class="card-body p-0">
+            <div class="queue-scrollable" id="queue-list">
+              <div class="queue-empty-state">
+                <div class="empty-icon">📁</div>
+                <p>No files loaded. Select or drag a folder above.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Activity Stream Console -->
+        <div class="card console-card">
+          <div class="card-header justify-between">
+            <div class="flex-align">
+              <span class="card-dot-green"></span>
+              <h2 class="card-title">TRANSMISSION STREAM CONSOLE</h2>
+            </div>
+            <button type="button" class="btn-sm btn-subtle" id="clear-console-btn">Clear Stream</button>
+          </div>
+          <div class="card-body p-0">
+            <div class="terminal-body" id="terminal-body">
+              <!-- Log entries -->
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

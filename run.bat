@@ -162,7 +162,7 @@ echo  %C_GREEN%[OK]%C_RESET% Storage: Sufficient drive capacity verified.
 REM ---------------------------------------------------------
 REM 4. CHECK & AUTO-INSTALL DEPENDENCIES
 REM ---------------------------------------------------------
-!PY_CMD! -c "import sys, customtkinter, requests, PIL; sys.exit(0)" >nul 2>&1
+!PY_CMD! -c "import sys, webview, requests, PIL; sys.exit(0)" >nul 2>&1
 if !ERRORLEVEL! neq 0 (
     echo  %C_YELLOW%[*] Missing packages detected. Automatically installing requirements...%C_RESET%
     echo [%DATE% %TIME%] [INFO] Missing requirements. Running pip install -r requirements.txt... >> "%LOGFILE%"
@@ -181,7 +181,7 @@ if !ERRORLEVEL! neq 0 (
         echo  %C_GREEN%[OK]%C_RESET% Dependencies installed successfully.
     )
 ) else (
-    echo  %C_GREEN%[OK]%C_RESET% Packages: %C_CYAN%customtkinter, requests, Pillow%C_RESET% verified.
+    echo  %C_GREEN%[OK]%C_RESET% Packages: %C_CYAN%pywebview (WebView2), requests, Pillow%C_RESET% verified.
 )
 
 echo.
