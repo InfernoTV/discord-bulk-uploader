@@ -19,11 +19,15 @@ const state = {
   currentBatchCount: 0,
   measuredBatchDuration: 0.8,
   displayProgress: 0.0,
-  targetProgress: 0.0
+  targetProgress: 0.0,
+  activeFilters: new Set(['all'])
 };
 
 // DOM Cache
 const dom = {
+  accentSwatches: document.getElementById('accent-swatches'),
+  customAccentPicker: document.getElementById('custom-accent-picker'),
+
   tokenInput: document.getElementById('token-input'),
   toggleTokenBtn: document.getElementById('toggle-token-btn'),
   verifyTokenBtn: document.getElementById('verify-token-btn'),
@@ -39,7 +43,7 @@ const dom = {
 
   folderInput: document.getElementById('folder-input'),
   browseFolderBtn: document.getElementById('browse-folder-btn'),
-  filterSelect: document.getElementById('filter-select'),
+  filterPills: document.getElementById('filter-pills'),
   fileSummaryText: document.getElementById('file-summary-text'),
 
   batchSegmented: document.getElementById('batch-segmented'),
@@ -67,7 +71,9 @@ const dom = {
 
   discordMosaicGrid: document.getElementById('discord-mosaic-grid'),
   mosaicBadge: document.getElementById('mosaic-badge'),
+  discordAvatar: document.getElementById('discord-avatar'),
   discordUsername: document.getElementById('discord-username'),
+  discordTag: document.getElementById('discord-tag'),
   discordTime: document.getElementById('discord-time'),
 
   queueList: document.getElementById('queue-list'),
@@ -389,6 +395,85 @@ function setPauseButtonMode(isPaused) {
   }
 }
 
+// ================= ACCENT COLOR PALETTE ENGINE =================
+function hexToRgba(hex, alpha) {
+  let r = 0, g = 0, b = 0;
+  const clean = hex.replace('#', '');
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length >= 6) {
+    r = parseInt(clean.substring(0, 2), 16);
+    g = parseInt(clean.substring(2, 4), 16);
+    b = parseInt(clean.substring(4, 6), 16);
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function darkenColor(hex, factor) {
+  let r = 0, g = 0, b = 0;
+  const clean = hex.replace('#', '');
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length >= 6) {
+    r = parseInt(clean.substring(0, 2), 16);
+    g = parseInt(clean.substring(2, 4), 16);
+    b = parseInt(clean.substring(4, 6), 16);
+  }
+  r = Math.max(0, Math.floor(r * (1 - factor)));
+  g = Math.max(0, Math.floor(g * (1 - factor)));
+  b = Math.max(0, Math.floor(b * (1 - factor)));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function setAccentColor(hex) {
+  if (!hex) return;
+  document.documentElement.style.setProperty('--accent', hex);
+  document.documentElement.style.setProperty('--accent-dim', hexToRgba(hex, 0.16));
+  document.documentElement.style.setProperty('--accent-glow', hexToRgba(hex, 0.38));
+  document.documentElement.style.setProperty('--aurora-2', hex);
+  document.documentElement.style.setProperty('--aurora-1', darkenColor(hex, 0.28));
+
+  try {
+    localStorage.setItem('bulkcord_accent', hex);
+  } catch (e) {}
+
+  if (dom.accentSwatches) {
+    dom.accentSwatches.querySelectorAll('.swatch-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-color').toLowerCase() === hex.toLowerCase());
+    });
+  }
+
+  if (dom.customAccentPicker) {
+    dom.customAccentPicker.value = hex;
+  }
+}
+
+if (dom.accentSwatches) {
+  dom.accentSwatches.querySelectorAll('.swatch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setAccentColor(btn.getAttribute('data-color'));
+    });
+  });
+}
+
+if (dom.customAccentPicker) {
+  dom.customAccentPicker.addEventListener('input', (e) => {
+    setAccentColor(e.target.value);
+  });
+}
+
+// Restore saved accent color preference
+try {
+  const savedAccent = localStorage.getItem('bulkcord_accent');
+  if (savedAccent) {
+    setAccentColor(savedAccent);
+  }
+} catch (e) {}
+
 // ================= USER INTERACTION EVENT LISTENERS =================
 
 // 1. Token Visibility Toggle
@@ -420,8 +505,17 @@ dom.verifyTokenBtn.addEventListener('click', async () => {
     if (res.success) {
       dom.authBadge.className = 'auth-badge verified';
       dom.authBadgeText.textContent = `VERIFIED: ${res.username.toUpperCase()} [${res.role.toUpperCase()}]`;
-      dom.discordUsername.textContent = res.username;
-      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Verified: ${res.username} (Snowflake ID: ${res.id})`);
+
+      // Update Client Simulation Box with actual Avatar and Global Username
+      if (res.avatar_url && dom.discordAvatar) {
+        dom.discordAvatar.innerHTML = `<img src="${res.avatar_url}" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
+      }
+      dom.discordUsername.textContent = res.global_name || res.username;
+      if (dom.discordTag) {
+        dom.discordTag.textContent = res.is_bot ? 'VERIFIED BOT' : 'USER';
+      }
+
+      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Verified: ${res.global_name || res.username} (Snowflake ID: ${res.id})`);
     } else {
       dom.authBadge.className = 'auth-badge error';
       dom.authBadgeText.textContent = `FAILED: ${res.error.toUpperCase()}`;
@@ -507,7 +601,7 @@ dom.channelSelect.addEventListener('change', () => {
   }
 });
 
-// 5. Folder Browsing & Loading
+// 5. Folder Browsing & Multi-Filter Loading
 dom.browseFolderBtn.addEventListener('click', async () => {
   try {
     const folder = await window.pywebview.api.select_folder_dialog();
@@ -525,16 +619,44 @@ dom.folderInput.addEventListener('change', () => {
   if (folder) loadFolder(folder);
 });
 
-dom.filterSelect.addEventListener('change', () => {
-  const folder = dom.folderInput.value.trim();
-  if (folder) loadFolder(folder);
-});
+// Multi-select Filter Pills Handling
+if (dom.filterPills) {
+  dom.filterPills.querySelectorAll('.pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const filterKey = btn.getAttribute('data-filter');
+
+      if (filterKey === 'all') {
+        state.activeFilters.clear();
+        state.activeFilters.add('all');
+      } else {
+        state.activeFilters.delete('all');
+        if (state.activeFilters.has(filterKey)) {
+          state.activeFilters.delete(filterKey);
+          if (state.activeFilters.size === 0) {
+            state.activeFilters.add('all');
+          }
+        } else {
+          state.activeFilters.add(filterKey);
+        }
+      }
+
+      // Update active styling on buttons
+      dom.filterPills.querySelectorAll('.pill-btn').forEach(b => {
+        const k = b.getAttribute('data-filter');
+        b.classList.toggle('active', state.activeFilters.has(k));
+      });
+
+      const folder = dom.folderInput.value.trim();
+      if (folder) loadFolder(folder);
+    });
+  });
+}
 
 async function loadFolder(folder) {
   dom.fileSummaryText.textContent = 'INDEXING DIRECTORY...';
   try {
-    const filter = dom.filterSelect.value;
-    const res = await window.pywebview.api.load_folder_files(folder, filter);
+    const filterTokens = state.activeFilters.has('all') ? 'all' : Array.from(state.activeFilters).join(',');
+    const res = await window.pywebview.api.load_folder_files(folder, filterTokens);
     if (res.success) {
       state.loadedFiles = res.files;
       state.totalFiles = res.files.length;
@@ -542,7 +664,7 @@ async function loadFolder(folder) {
       dom.hudSent.textContent = `0 / ${res.files.length}`;
       renderDiscordMosaic();
       renderQueueList();
-      appendLog('INFO', new Date().toLocaleTimeString(), `Indexed ${res.files.length} assets from ${folder}`);
+      appendLog('INFO', new Date().toLocaleTimeString(), `Indexed ${res.files.length} assets [Filters: ${filterTokens.toUpperCase()}] from ${folder}`);
     } else {
       dom.fileSummaryText.textContent = 'INDEXING FAILED';
       appendLog('ERROR', new Date().toLocaleTimeString(), res.error);

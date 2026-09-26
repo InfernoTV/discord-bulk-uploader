@@ -8,17 +8,23 @@ Bulk upload folders of images, stickers, or files to any Discord channel with an
 
 Built with Python and a modern, hardware-accelerated WebView2 desktop UI.
 
+> [!TIP]
+> **One-Click Plug and Play Executable:**
+> If you do not care about the source code and want a ready, one-click plug and play solution, grab the pre-built `BulkCord.exe` directly from the [Releases Page](https://github.com/InfernoTV/discord-bulk-uploader/releases/latest). No Python, command line, or dependency installation required.
+
 ---
 
 ### Key Features
 
-* **Discord-Grade Desktop UI:** Powered by Microsoft Edge WebView2 (Chromium) and PyWebView. Delivers genuine CSS3 styling, glassmorphism, glowing telemetry, and razor-sharp subpixel typography with zero DPI blur.
-* **Exact Discord Client Mosaic:** Accurate real-time layout preview matching Discord's native client mosaic algorithm (groups bottom rows into 3s and expands top rows for 5, 7, and 8 files).
+* **One-Click Standalone Executable:** Zero installation required. Bundles Edge WebView2 support, Python runtime, and all dependencies into a single portable binary.
+* **Custom Theme Accent Picker:** Switch between Ayran Gold, Cyber Cyan, Electric Violet, Emerald, Crimson, Rose Pink, and Discord Blurple, or pick any custom hex shade with the live color wheel.
+* **Multi-Select Asset Filtering:** Filter queued files across single or combined extensions (PNG, JPG, WEBP, GIF, Videos, Audio, and Archives) with instant real-time indexing.
+* **User & Bot Profile Fetching:** Validates tokens directly with Discord `/users/@me`, pulling display names and profile avatars directly into the client simulation card.
+* **Accurate Discord Client Mosaic:** Simulates Discord's native 6-column attachment layout (triplet grouping at the base, expanded previews on top for 5, 7, and 8 files) with unclipped hover highlights.
 * **Dynamic Batch Packing (1 to 10 files per message):** Chunks uploads into multipart payloads using Discord's native 10-attachment limit. Mid-upload batch size and delay adjustments apply immediately to the next batch without restarting.
-* **Live Telemetry & Extrapolated Progress:** Real-time ETA estimation, upload speed calculation (files/sec), and 60 FPS progress bar extrapolation.
+* **Live Telemetry & Extrapolated Progress:** Real-time ETA estimation, upload speed calculation (files/sec), and 60 FPS sub-second lerp progress tracking.
 * **Full Asset Queue & Auto-Scroll:** Interactive file list displaying in-memory thumbnails, file sizes, naturally sorted names (`001`, `002`), and live status pills that automatically scroll to follow the active upload batch.
 * **Auto 429 Defense:** Defaults to a safe 2.5s delay. If Discord flags a rate limit, the engine parses the `Retry-After` header, pauses, and safely retries the batch.
-* **Token Verification:** Works with Bot tokens (`Bot <token>`) and user tokens, checking identity via `/users/@me`.
 * **Channel and Server Tree:** Paste channel links directly or input a Server ID to load and select text channels from a dropdown.
 
 ---

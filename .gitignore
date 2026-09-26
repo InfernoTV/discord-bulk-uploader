@@ -5,5 +5,8 @@ __pycache__/
 .env
 token.txt
 *.zip
+build/
+dist/
+*.spec
 .vscode/
 .idea/

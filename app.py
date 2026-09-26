@@ -20,6 +20,15 @@ if sys.stdout and sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8'
         pass
 
 
+def get_resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller bundle."""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
 def natural_sort_key(s: str):
     """Sort filenames with numbers naturally (1, 2, 10 instead of 1, 10, 2)."""
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
@@ -113,13 +122,31 @@ class DiscordUploaderAPI:
             if resp.status_code == 200:
                 data = resp.json()
                 name = data.get("username", "Unknown")
+                global_name = data.get("global_name") or name
                 bot = data.get("bot", False)
                 role = "Bot" if bot else "User"
+                user_id = data.get("id", "")
+                avatar_hash = data.get("avatar")
+                discriminator = data.get("discriminator", "0")
+
+                if avatar_hash:
+                    ext = "gif" if avatar_hash.startswith("a_") else "png"
+                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.{ext}?size=128"
+                else:
+                    if discriminator and discriminator != "0":
+                        default_idx = int(discriminator) % 5
+                    else:
+                        default_idx = (int(user_id) >> 22) % 6 if user_id and user_id.isdigit() else 0
+                    avatar_url = f"https://cdn.discordapp.com/embed/avatars/{default_idx}.png"
+
                 return {
                     "success": True,
                     "username": name,
+                    "global_name": global_name,
                     "role": role,
-                    "id": data.get("id")
+                    "id": user_id,
+                    "avatar_url": avatar_url,
+                    "is_bot": bot
                 }
             elif resp.status_code == 401:
                 return {"success": False, "error": "401 Unauthorized: Invalid Discord token."}
@@ -203,7 +230,10 @@ class DiscordUploaderAPI:
             return None
 
     def load_folder_files(self, folder_path: str, filter_mode: str) -> Dict:
-        """Scans folder, naturally sorts files, and builds in-memory thumbnails."""
+        """Scans folder, naturally sorts files, and builds in-memory thumbnails.
+        Supports multi-filter tokens (png, jpg, webp, gif, video, audio, docs, archives)
+        or custom extensions separated by comma.
+        """
         folder = folder_path.strip()
         if not folder or not os.path.isdir(folder):
             return {"success": False, "error": "Provided folder path does not exist."}
@@ -213,15 +243,40 @@ class DiscordUploaderAPI:
         except Exception as e:
             return {"success": False, "error": f"Directory read error: {e}"}
 
-        if "All Images" in filter_mode:
-            valid_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-            filenames = [f for f in entries if os.path.splitext(f)[1].lower() in valid_exts]
-        elif "PNG Only" in filter_mode:
-            filenames = [f for f in entries if f.lower().endswith(".png")]
-        elif "WebP Only" in filter_mode:
-            filenames = [f for f in entries if f.lower().endswith(".webp")]
+        CATEGORY_MAP = {
+            "images": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg", ".ico"},
+            "png": {".png"},
+            "jpg": {".jpg", ".jpeg"},
+            "jpeg": {".jpg", ".jpeg"},
+            "webp": {".webp"},
+            "gif": {".gif"},
+            "gifs": {".gif"},
+            "video": {".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv"},
+            "audio": {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"},
+            "docs": {".pdf", ".txt", ".md", ".json", ".csv", ".doc", ".docx"},
+            "archives": {".zip", ".rar", ".7z", ".tar", ".gz"}
+        }
+
+        raw_tokens = [t.strip().lower() for t in filter_mode.split(",") if t.strip()]
+
+        match_all = False
+        target_exts = set()
+
+        if not raw_tokens or "all" in raw_tokens or "all files" in raw_tokens:
+            match_all = True
         else:
+            for token in raw_tokens:
+                if token in CATEGORY_MAP:
+                    target_exts.update(CATEGORY_MAP[token])
+                elif token.startswith("."):
+                    target_exts.add(token)
+                else:
+                    target_exts.add(f".{token}")
+
+        if match_all or not target_exts:
             filenames = [f for f in entries if os.path.isfile(os.path.join(folder, f))]
+        else:
+            filenames = [f for f in entries if os.path.splitext(f)[1].lower() in target_exts and os.path.isfile(os.path.join(folder, f))]
 
         filenames.sort(key=natural_sort_key)
         self._current_folder = folder
@@ -432,7 +487,7 @@ class DiscordUploaderAPI:
 
 def main():
     api = DiscordUploaderAPI()
-    ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "index.html")
+    ui_path = get_resource_path(os.path.join("ui", "index.html"))
 
     if not os.path.exists(ui_path):
         print(f"[ERROR] UI template not found at: {ui_path}")

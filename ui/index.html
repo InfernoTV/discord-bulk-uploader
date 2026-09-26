@@ -35,6 +35,30 @@
       </div>
 
       <div class="topbar-actions">
+        <!-- Theme Accent Color Picker UI -->
+        <div class="accent-palette-picker">
+          <span class="palette-label font-mono">ACCENT</span>
+          <div class="swatch-group" id="accent-swatches">
+            <button type="button" class="swatch-btn active" data-color="#FFC72C" title="Ayran Gold" style="--swatch:#FFC72C;"></button>
+            <button type="button" class="swatch-btn" data-color="#00F0FF" title="Cyber Cyan" style="--swatch:#00F0FF;"></button>
+            <button type="button" class="swatch-btn" data-color="#A855F7" title="Electric Violet" style="--swatch:#A855F7;"></button>
+            <button type="button" class="swatch-btn" data-color="#10B981" title="Emerald Green" style="--swatch:#10B981;"></button>
+            <button type="button" class="swatch-btn" data-color="#EF4444" title="Crimson" style="--swatch:#EF4444;"></button>
+            <button type="button" class="swatch-btn" data-color="#F43F5E" title="Rose Pink" style="--swatch:#F43F5E;"></button>
+            <button type="button" class="swatch-btn" data-color="#5865F2" title="Discord Blurple" style="--swatch:#5865F2;"></button>
+          </div>
+          <label class="custom-color-btn" title="Choose Custom Accent Color">
+            <input type="color" id="custom-accent-picker" value="#FFC72C">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+              <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+              <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+              <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+            </svg>
+          </label>
+        </div>
+
         <div class="status-indicator-pill" id="global-status-pill">
           <span class="status-dot" id="global-status-dot"></span>
           <span class="status-text font-mono" id="global-status-text">SYSTEM IDLE</span>
@@ -150,14 +174,23 @@
                 <span>BROWSE</span>
               </button>
             </div>
-            <div class="filter-row mt-2">
-              <select id="filter-select">
-                <option value="All Images">All Images (.png, .jpg, .webp, .gif)</option>
-                <option value="PNG Only">PNG Only (*.png)</option>
-                <option value="WebP Only">WebP Only (*.webp)</option>
-                <option value="All Files">All Files (*.*)</option>
-              </select>
-              <div class="file-summary font-mono" id="file-summary-text">NO ASSETS LOADED</div>
+            <div class="filter-section mt-2">
+              <div class="filter-header">
+                <span class="filter-label font-mono">EXTENSION FILTERS (MULTI-SELECT):</span>
+                <div class="file-summary font-mono" id="file-summary-text">NO ASSETS LOADED</div>
+              </div>
+              <div class="filter-pills" id="filter-pills">
+                <button type="button" class="pill-btn active" data-filter="all">ALL</button>
+                <button type="button" class="pill-btn" data-filter="images">IMAGES</button>
+                <button type="button" class="pill-btn" data-filter="png">PNG</button>
+                <button type="button" class="pill-btn" data-filter="jpg">JPG</button>
+                <button type="button" class="pill-btn" data-filter="webp">WEBP</button>
+                <button type="button" class="pill-btn" data-filter="gif">GIF</button>
+                <button type="button" class="pill-btn" data-filter="video">VIDEO</button>
+                <button type="button" class="pill-btn" data-filter="audio">AUDIO</button>
+                <button type="button" class="pill-btn" data-filter="docs">DOCS</button>
+                <button type="button" class="pill-btn" data-filter="archives">ZIP</button>
+              </div>
             </div>
           </div>
         </div>
@@ -301,7 +334,7 @@
             <!-- Client Message Simulation Box -->
             <div class="client-message-box">
               <div class="client-header">
-                <div class="client-avatar">
+                <div class="client-avatar" id="discord-avatar">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
                     <path d="M12 6a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm0 6a2 2 0 1 1 2-2 2 2 0 0 1-2 2z"/>
@@ -309,7 +342,7 @@
                 </div>
                 <div class="client-user-meta">
                   <span class="client-name" id="discord-username">BulkCord Client</span>
-                  <span class="client-tag font-mono">VERIFIED BOT</span>
+                  <span class="client-tag font-mono" id="discord-tag">VERIFIED BOT</span>
                   <span class="client-timestamp font-mono" id="discord-time">Today at 12:00 PM</span>
                 </div>
               </div>
