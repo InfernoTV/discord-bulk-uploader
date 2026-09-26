@@ -1,6 +1,10 @@
-# Discord Bulk Uploader
+# BulkCord Uploader
 
-A lightweight desktop tool to dump folders of images, stickers, or files into any Discord channel without getting rate limited into oblivion.
+<p align="center">
+  <img src="assets/logo.png" width="160" alt="BulkCord Uploader Logo" style="border-radius: 20px;" />
+</p>
+
+A fast desktop tool to dump folders of images, stickers, or files into any Discord channel without getting rate limited into oblivion.
 
 Built with Python, CustomTkinter, and Pillow.
 
@@ -11,7 +15,7 @@ If you have ever tried uploading 50+ stickers, emotes, or screenshots to a Disco
 2. If you automate it with basic scripts, you hit 429 rate limit errors or your account gets flagged.
 3. Discord supports up to 10 files per message (which arranges them in a clean mosaic grid), but standard scripts send 1 file per message and waste 10x more API requests.
 
-This tool solves all of that with a clean dark-mode UI, batch grouping, visual queue previews, and automatic rate-limit backoff.
+BulkCord solves all of that with a clean dark-mode UI, batch grouping, visual queue previews, and automatic rate-limit backoff.
 
 ## Features
 
@@ -19,6 +23,7 @@ This tool solves all of that with a clean dark-mode UI, batch grouping, visual q
 - **Live Discord Message Mock:** See a preview of how Discord renders your chosen batch size before you start sending.
 - **Visual File Queue:** Scroll through real thumbnail previews of your upcoming files with real-time status badges (Upcoming, Sending, Sent).
 - **Anti-Rate-Limit Engine:** Preset to a safe 2.5s delay. If Discord returns a 429 error, the app reads Discord's exact `retry_after` response, sleeps, and retries the batch automatically.
+- **Smart Launcher (`run.bat`):** Checks your Python environment, verifies Python version (3.8+), checks available disk space, auto-installs missing dependencies via pip, and logs any crash details into `launcher.log`.
 - **Bot or User Token Support:** Works with regular Bot Tokens or user accounts. Includes a built-in token verification button that pulls your profile info.
 - **Channel Link and Tree Parser:** Paste any full Discord channel URL or raw channel ID. You can also drop your Server ID to fetch and browse the full channel hierarchy from a dropdown.
 - **Natural File Sorting:** Files named `1.png`, `2.png`, `10.png` are uploaded in actual numerical order rather than alphabetical order.
@@ -32,16 +37,14 @@ git clone https://github.com/InfernoTV/discord-bulk-uploader.git
 cd discord-bulk-uploader
 ```
 
-2. Install dependencies:
+2. Run the launcher:
+Just double-click `run.bat` on Windows. It will verify your environment, install any missing requirements automatically, and launch the app.
+
+Alternatively, install requirements manually:
 ```bash
 pip install -r requirements.txt
-```
-
-3. Launch the app:
-```bash
 python app.py
 ```
-*(On Windows, you can also just double-click `run.bat`)*
 
 ## Quick Guide
 

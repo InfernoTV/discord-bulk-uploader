@@ -54,9 +54,17 @@ class DiscordBulkUploaderApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Discord Bulk Uploader")
+        self.title("BulkCord Uploader")
         self.geometry("1260x880")
         self.minsize(1050, 780)
+
+        # Set window icon
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
 
         # Discord Color Palette
         self.c_bg = "#1E1F22"
@@ -133,21 +141,36 @@ class DiscordBulkUploaderApp(ctk.CTk):
         header = ctk.CTkFrame(self.left_col, fg_color="transparent")
         header.pack(fill="x", pady=(0, 12))
 
+        header_top = ctk.CTkFrame(header, fg_color="transparent")
+        header_top.pack(fill="x")
+
+        logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            try:
+                logo_im = Image.open(logo_path)
+                logo_ctk = ctk.CTkImage(light_image=logo_im, dark_image=logo_im, size=(40, 40))
+                ctk.CTkLabel(header_top, image=logo_ctk, text="").pack(side="left", padx=(0, 10))
+            except Exception:
+                pass
+
+        title_box = ctk.CTkFrame(header_top, fg_color="transparent")
+        title_box.pack(side="left", fill="y")
+
         title = ctk.CTkLabel(
-            header,
-            text="Discord Bulk Uploader",
+            title_box,
+            text="BulkCord Uploader",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=self.c_text
         )
         title.pack(anchor="w")
 
         subtitle = ctk.CTkLabel(
-            header,
+            title_box,
             text="Automated file dropper with batching, preview, and rate limit defense",
             font=ctk.CTkFont(size=12),
             text_color=self.c_subtext
         )
-        subtitle.pack(anchor="w", pady=(2, 0))
+        subtitle.pack(anchor="w", pady=(1, 0))
 
         # 1. Authentication Card
         auth_card = self.create_card(self.left_col, "1. AUTHENTICATION")
@@ -646,7 +669,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.log_textbox.tag_config("INFO", foreground=self.c_blurple)
         self.log_textbox.tag_config("TIME", foreground="#72767D")
 
-        self.log("INFO", "Discord Bulk Uploader initialized and ready.")
+        self.log("INFO", "BulkCord Uploader initialized and ready.")
 
     def create_card(self, parent, title: str):
         card = ctk.CTkFrame(
