@@ -3,12 +3,24 @@ import os
 import re
 import sys
 import time
+import math
 import json
 import queue
 import mimetypes
 import threading
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Optional
 from PIL import Image
+
+# 1. Enable Windows High-DPI Awareness BEFORE Tkinter initialization
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 import customtkinter as ctk
 
@@ -29,7 +41,7 @@ def natural_sort_key(s: str):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
 
-def extract_channel_and_guild(input_str: str) -> Tuple[str, str]:
+def extract_channel_and_guild(input_str: str) -> Tuple[Optional[str], Optional[str]]:
     """Parse Discord link or raw snowflake into channel_id and optional guild_id."""
     input_str = input_str.strip()
     guild_id = None
@@ -50,13 +62,41 @@ def extract_channel_and_guild(input_str: str) -> Tuple[str, str]:
     return channel_id, guild_id
 
 
+def format_duration(seconds: float) -> str:
+    """Format seconds into human-readable duration (e.g. 45s, 02m 15s)."""
+    if seconds <= 0:
+        return "0s"
+    s = int(math.ceil(seconds))
+    if s < 60:
+        return f"{s}s"
+    m = s // 60
+    rem_s = s % 60
+    return f"{m:02d}m {rem_s:02d}s"
+
+
+# Discord's exact client image mosaic grouping logic:
+# Groups rows of 3 at the bottom and expands remainder items on top
+DISCORD_MOSAIC_LAYOUTS = {
+    1: [1],
+    2: [2],
+    3: [1, 2],
+    4: [2, 2],
+    5: [2, 3],        # Top: 2 big, Bottom: 3
+    6: [3, 3],        # Top: 3, Bottom: 3
+    7: [1, 3, 3],     # Top: 1 big full width, Middle: 3, Bottom: 3
+    8: [2, 3, 3],     # Top: 2 big, Middle: 3, Bottom: 3
+    9: [3, 3, 3],     # Top: 3, Middle: 3, Bottom: 3
+    10: [1, 3, 3, 3]  # Top: 1 big, Row 2: 3, Row 3: 3, Row 4: 3
+}
+
+
 class DiscordBulkUploaderApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.title("BulkCord Uploader")
-        self.geometry("1260x880")
-        self.minsize(1050, 780)
+        self.geometry("1280x900")
+        self.minsize(1080, 800)
 
         # Set window icon
         icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
@@ -66,13 +106,14 @@ class DiscordBulkUploaderApp(ctk.CTk):
             except Exception:
                 pass
 
-        # Discord Color Palette
+        # Discord High-Contrast Theme Palette
         self.c_bg = "#1E1F22"
         self.c_card = "#2B2D31"
         self.c_card_border = "#35373C"
         self.c_input = "#383A40"
         self.c_blurple = "#5865F2"
         self.c_blurple_hover = "#4752C4"
+        self.c_blurple_bright = "#7983F5"
         self.c_green = "#23A55A"
         self.c_green_hover = "#1F9250"
         self.c_yellow = "#F0B232"
@@ -84,35 +125,51 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         self.configure(fg_color=self.c_bg)
 
-        # State Variables
-        self.upload_thread = None
+        # Font configuration
+        self.font_family = "Segoe UI Variable Display"
+
+        # Threading & Control Flags
+        self.upload_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         self.pause_event.set()
         self.log_queue = queue.Queue()
 
+        # Telemetry & Smooth Extrapolated Progress State
+        self.is_running = False
+        self.is_paused = False
+        self.upload_start_time = 0.0
+        self.processed_files_count = 0
+        self.total_files_count = 0
+        self.current_progress_display = 0.0
+        self.extrapolated_target = 0.0
+        self.measured_batch_duration = 0.8  # initial API network time estimate
+        self.batch_start_timestamp = 0.0
+        self.current_batch_count = 0
+        self.anim_tick_count = 0.0
+        self.active_batch_indices: List[int] = []
+
+        # Queue & Cache
         self.loaded_files: List[str] = []
-        self.channel_map = {}
+        self.channel_map: Dict[str, str] = {}
         self.authenticated_user = "Not Authenticated"
-        self.thumbnail_cache = {}
-        self.queue_item_widgets = {}
+        self.thumbnail_cache: Dict[str, ctk.CTkImage] = {}
+        self.queue_item_widgets: Dict[int, Tuple[ctk.CTkFrame, ctk.CTkLabel, ctk.CTkLabel]] = {}
 
         self.build_ui()
-        self.after(100, self.process_log_queue)
+        self.after(60, self.process_log_queue)
+        self.after(35, self.animation_tick)
 
-        # Check for katafeych1k_png preset
-        preset = r"C:\Users\momo3\.gemini\antigravity\scratch\katafeych1k_png"
-        if os.path.exists(preset):
-            self.folder_var.set(preset)
-            self.refresh_file_list()
+    def font(self, size: int, weight: str = "normal"):
+        return ctk.CTkFont(family=self.font_family, size=size, weight=weight)
 
     def build_ui(self):
-        # Master grid layout: 2 columns
+        # Two-column layout: Left (520px min), Right (560px min)
         self.grid_columnconfigure(0, weight=5, minsize=520)
         self.grid_columnconfigure(1, weight=6, minsize=560)
         self.grid_rowconfigure(0, weight=1)
 
-        # Left Column: Configuration & Controls (Scrollable)
+        # Left Column: Configuration & Controls
         self.left_col = ctk.CTkScrollableFrame(
             self,
             fg_color=self.c_bg,
@@ -120,7 +177,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         )
         self.left_col.grid(row=0, column=0, sticky="nsew", padx=(16, 8), pady=16)
 
-        # Right Column: Live Discord Preview, Queue & Activity Log
+        # Right Column: Discord Preview, File Queue & Console
         self.right_col = ctk.CTkFrame(
             self,
             fg_color=self.c_bg,
@@ -128,7 +185,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         )
         self.right_col.grid(row=0, column=1, sticky="nsew", padx=(8, 16), pady=16)
         self.right_col.grid_columnconfigure(0, weight=1)
-        self.right_col.grid_rowconfigure(0, weight=0)  # Discord Mock Preview
+        self.right_col.grid_rowconfigure(0, weight=0)  # Discord Preview
         self.right_col.grid_rowconfigure(1, weight=1)  # File Queue Visualizer
         self.right_col.grid_rowconfigure(2, weight=1)  # Activity Terminal
 
@@ -137,9 +194,9 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
     # ================= LEFT PANEL =================
     def build_left_panel(self):
-        # Header
+        # Top Header
         header = ctk.CTkFrame(self.left_col, fg_color="transparent")
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 10))
 
         header_top = ctk.CTkFrame(header, fg_color="transparent")
         header_top.pack(fill="x")
@@ -148,7 +205,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         if os.path.exists(logo_path):
             try:
                 logo_im = Image.open(logo_path)
-                logo_ctk = ctk.CTkImage(light_image=logo_im, dark_image=logo_im, size=(40, 40))
+                logo_ctk = ctk.CTkImage(light_image=logo_im, dark_image=logo_im, size=(42, 42))
                 ctk.CTkLabel(header_top, image=logo_ctk, text="").pack(side="left", padx=(0, 10))
             except Exception:
                 pass
@@ -159,15 +216,15 @@ class DiscordBulkUploaderApp(ctk.CTk):
         title = ctk.CTkLabel(
             title_box,
             text="BulkCord Uploader",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=self.font(20, "bold"),
             text_color=self.c_text
         )
         title.pack(anchor="w")
 
         subtitle = ctk.CTkLabel(
             title_box,
-            text="Automated file dropper with batching, preview, and rate limit defense",
-            font=ctk.CTkFont(size=12),
+            text="High-performance bulk asset dropper with live preview and rate defense",
+            font=self.font(12),
             text_color=self.c_subtext
         )
         subtitle.pack(anchor="w", pady=(1, 0))
@@ -187,7 +244,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             fg_color=self.c_input,
             border_color=self.c_card_border,
             corner_radius=8,
-            height=36
+            height=36,
+            font=self.font(12)
         )
         self.token_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
@@ -210,7 +268,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=36,
             fg_color=self.c_blurple,
             hover_color=self.c_blurple_hover,
-            font=ctk.CTkFont(weight="bold"),
+            font=self.font(12, "bold"),
             corner_radius=8,
             command=self.test_token
         )
@@ -225,7 +283,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             text="Bot Token (adds 'Bot ' prefix)",
             variable=self.is_bot_var,
             fg_color=self.c_blurple,
-            font=ctk.CTkFont(size=12),
+            font=self.font(12),
             text_color=self.c_text
         )
         self.bot_chk.pack(side="left")
@@ -233,7 +291,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.auth_badge = ctk.CTkLabel(
             opts_row,
             text="Not Authenticated",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=self.font(11, "bold"),
             text_color=self.c_subtext
         )
         self.auth_badge.pack(side="right")
@@ -252,7 +310,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             fg_color=self.c_input,
             border_color=self.c_card_border,
             corner_radius=8,
-            height=36
+            height=36,
+            font=self.font(12)
         )
         self.channel_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.channel_entry.bind("<KeyRelease>", self.on_channel_input_change)
@@ -264,7 +323,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=36,
             fg_color=self.c_input,
             hover_color=self.c_blurple,
-            font=ctk.CTkFont(weight="bold"),
+            font=self.font(12, "bold"),
             corner_radius=8,
             command=self.verify_channel
         )
@@ -281,7 +340,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             fg_color=self.c_input,
             border_color=self.c_card_border,
             corner_radius=8,
-            height=34
+            height=34,
+            font=self.font(12)
         )
         self.guild_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
@@ -292,13 +352,12 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=34,
             fg_color=self.c_input,
             hover_color=self.c_blurple,
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=self.font(11, "bold"),
             corner_radius=8,
             command=self.fetch_guild_channels
         )
         self.fetch_chan_btn.pack(side="right")
 
-        # Channel dropdown
         drop_row = ctk.CTkFrame(chan_card, fg_color="transparent")
         drop_row.pack(fill="x", padx=14, pady=(0, 10))
 
@@ -312,6 +371,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             button_color=self.c_blurple,
             corner_radius=8,
             height=34,
+            font=self.font(12),
             command=self.on_channel_dropdown_selected
         )
         self.channel_dropdown.pack(fill="x")
@@ -330,7 +390,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             fg_color=self.c_input,
             border_color=self.c_card_border,
             corner_radius=8,
-            height=36
+            height=36,
+            font=self.font(12)
         )
         self.folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.folder_entry.bind("<KeyRelease>", lambda e: self.refresh_file_list())
@@ -342,7 +403,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=36,
             fg_color=self.c_input,
             hover_color=self.c_blurple,
-            font=ctk.CTkFont(weight="bold"),
+            font=self.font(12, "bold"),
             corner_radius=8,
             command=self.browse_folder
         )
@@ -365,34 +426,20 @@ class DiscordBulkUploaderApp(ctk.CTk):
             button_color=self.c_blurple,
             corner_radius=8,
             height=32,
+            font=self.font(11),
             command=lambda v: self.refresh_file_list()
         )
-        self.filter_menu.pack(side="left", padx=(0, 8))
-
-        preset_path = r"C:\Users\momo3\.gemini\antigravity\scratch\katafeych1k_png"
-        if os.path.exists(preset_path):
-            preset_btn = ctk.CTkButton(
-                filter_row,
-                text="Use 'katafeych1k_png'",
-                fg_color="#1F4733",
-                hover_color=self.c_green,
-                text_color=self.c_green,
-                corner_radius=8,
-                height=32,
-                font=ctk.CTkFont(size=11, weight="bold"),
-                command=lambda: (self.folder_var.set(preset_path), self.refresh_file_list())
-            )
-            preset_btn.pack(side="left")
+        self.filter_menu.pack(side="left")
 
         self.file_stats_lbl = ctk.CTkLabel(
             source_card,
-            text="No folder loaded",
-            font=ctk.CTkFont(size=12),
+            text="No folder loaded. Browse or paste a path above.",
+            font=self.font(12),
             text_color=self.c_subtext
         )
         self.file_stats_lbl.pack(anchor="w", padx=14, pady=(0, 10))
 
-        # 4. Batching & Timing Card
+        # 4. Batching & Rate Limiting Card
         batch_card = self.create_card(self.left_col, "4. BATCH SIZE & RATE LIMIT TIMING")
 
         b_header_row = ctk.CTkFrame(batch_card, fg_color="transparent")
@@ -401,19 +448,19 @@ class DiscordBulkUploaderApp(ctk.CTk):
         ctk.CTkLabel(
             b_header_row,
             text="Batch Size (Files per Discord Message):",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             text_color=self.c_text
         ).pack(side="left")
 
         self.batch_val_lbl = ctk.CTkLabel(
             b_header_row,
             text="4 files / msg",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             text_color=self.c_yellow
         )
         self.batch_val_lbl.pack(side="right")
 
-        # Batch Size Segmented Button (1 to 10)
+        # Dynamic Segmented Button (1 to 10)
         self.batch_seg = ctk.CTkSegmentedButton(
             batch_card,
             values=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
@@ -422,15 +469,16 @@ class DiscordBulkUploaderApp(ctk.CTk):
             unselected_color=self.c_input,
             corner_radius=8,
             height=32,
+            font=self.font(12, "bold"),
             command=self.on_batch_size_changed
         )
         self.batch_seg.set("4")
-        self.batch_seg.pack(fill="x", padx=14, pady=(0, 8))
+        self.batch_seg.pack(fill="x", padx=14, pady=(0, 6))
 
         self.batch_expl_lbl = ctk.CTkLabel(
             batch_card,
-            text="⚡ Groups 4 images into a single Discord message mosaic. Drastically cuts rate limits.",
-            font=ctk.CTkFont(size=11),
+            text="⚡ Adjust anytime. Changes take effect on the very next batch mid-upload.",
+            font=self.font(11),
             text_color=self.c_subtext
         )
         self.batch_expl_lbl.pack(anchor="w", padx=14, pady=(0, 10))
@@ -442,14 +490,14 @@ class DiscordBulkUploaderApp(ctk.CTk):
         ctk.CTkLabel(
             d_row,
             text="Delay between Messages:",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             text_color=self.c_text
         ).pack(side="left")
 
         self.delay_val_lbl = ctk.CTkLabel(
             d_row,
             text="2.5s (Safe Default)",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             text_color=self.c_green
         )
         self.delay_val_lbl.pack(side="right")
@@ -469,13 +517,13 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         ctk.CTkLabel(
             batch_card,
-            text="🛡️ Automatic 429 backoff: If Discord issues a rate-limit, uploader pauses and retries safely.",
-            font=ctk.CTkFont(size=11),
+            text="🛡️ Live adjustment: Slider applies immediately to upcoming delays with auto-429 defense.",
+            font=self.font(11),
             text_color=self.c_subtext
         ).pack(anchor="w", padx=14, pady=(0, 10))
 
-        # 5. Controls & Progress Card
-        ctrl_card = self.create_card(self.left_col, "5. EXECUTION CONTROLS")
+        # 5. Execution Controls & Real-Time Telemetry Card
+        ctrl_card = self.create_card(self.left_col, "5. EXECUTION CONTROLS & TELEMETRY")
 
         btn_row = ctk.CTkFrame(ctrl_card, fg_color="transparent")
         btn_row.pack(fill="x", padx=14, pady=(4, 10))
@@ -483,7 +531,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.start_btn = ctk.CTkButton(
             btn_row,
             text="▶ Start Upload",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=self.font(14, "bold"),
             fg_color=self.c_green,
             hover_color=self.c_green_hover,
             text_color="#FFFFFF",
@@ -496,7 +544,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.pause_btn = ctk.CTkButton(
             btn_row,
             text="⏸ Pause",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             fg_color=self.c_yellow,
             hover_color="#D99B26",
             text_color="#1E1F22",
@@ -510,7 +558,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.stop_btn = ctk.CTkButton(
             btn_row,
             text="⏹ Stop",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             fg_color=self.c_red,
             hover_color=self.c_red_hover,
             text_color="#FFFFFF",
@@ -521,7 +569,36 @@ class DiscordBulkUploaderApp(ctk.CTk):
         )
         self.stop_btn.pack(side="left", padx=(4, 0))
 
-        # Progress Bar
+        # Real-time HUD telemetry pills
+        hud_frame = ctk.CTkFrame(ctrl_card, fg_color="#232428", corner_radius=8)
+        hud_frame.pack(fill="x", padx=14, pady=(0, 8))
+        hud_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.hud_eta = ctk.CTkLabel(
+            hud_frame,
+            text="⏱ ETA: --:--",
+            font=self.font(12, "bold"),
+            text_color=self.c_subtext
+        )
+        self.hud_eta.grid(row=0, column=0, pady=8)
+
+        self.hud_speed = ctk.CTkLabel(
+            hud_frame,
+            text="⚡ Speed: 0.0 f/s",
+            font=self.font(12, "bold"),
+            text_color=self.c_subtext
+        )
+        self.hud_speed.grid(row=0, column=1, pady=8)
+
+        self.hud_sent = ctk.CTkLabel(
+            hud_frame,
+            text="📦 Sent: 0 / 0",
+            font=self.font(12, "bold"),
+            text_color=self.c_subtext
+        )
+        self.hud_sent.grid(row=0, column=2, pady=8)
+
+        # Smooth extrapolated progress bar
         self.progress_bar = ctk.CTkProgressBar(
             ctrl_card,
             progress_color=self.c_blurple,
@@ -535,7 +612,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.status_lbl = ctk.CTkLabel(
             ctrl_card,
             text="Status: Ready to upload",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font(12, "bold"),
             text_color=self.c_text
         )
         self.status_lbl.pack(anchor="w", padx=14, pady=(0, 10))
@@ -543,10 +620,10 @@ class DiscordBulkUploaderApp(ctk.CTk):
     # ================= RIGHT PANEL =================
     def build_right_panel(self):
         # 1. Discord Message Mock Preview Card
-        self.preview_card = self.create_card(self.right_col, "DISCORD MESSAGE PREVIEW (HOW IT RENDERS IN CHAT)")
+        self.preview_card = self.create_card(self.right_col, "DISCORD MESSAGE PREVIEW (EXACT CLIENT MOSAIC)")
         self.preview_card.pack(fill="x", pady=(0, 8))
 
-        # Message container imitating Discord
+        # Discord message container
         self.discord_msg_box = ctk.CTkFrame(
             self.preview_card,
             fg_color="#313338",
@@ -556,11 +633,10 @@ class DiscordBulkUploaderApp(ctk.CTk):
         )
         self.discord_msg_box.pack(fill="x", padx=12, pady=(2, 10))
 
-        # User header inside message
+        # Discord User Header
         user_header = ctk.CTkFrame(self.discord_msg_box, fg_color="transparent")
         user_header.pack(fill="x", padx=10, pady=(8, 4))
 
-        # Avatar circle placeholder
         self.avatar_circle = ctk.CTkLabel(
             user_header,
             text="🤖",
@@ -568,14 +644,14 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=36,
             fg_color=self.c_blurple,
             corner_radius=18,
-            font=ctk.CTkFont(size=16)
+            font=self.font(16)
         )
         self.avatar_circle.pack(side="left", padx=(0, 8))
 
         self.preview_user_lbl = ctk.CTkLabel(
             user_header,
             text="Bot / User",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font(13, "bold"),
             text_color=self.c_text
         )
         self.preview_user_lbl.pack(side="left", padx=(0, 6))
@@ -583,7 +659,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.bot_pill = ctk.CTkLabel(
             user_header,
             text="BOT",
-            font=ctk.CTkFont(size=9, weight="bold"),
+            font=self.font(9, "bold"),
             fg_color=self.c_blurple,
             text_color="#FFFFFF",
             corner_radius=4,
@@ -595,7 +671,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.time_lbl = ctk.CTkLabel(
             user_header,
             text="Today at " + time.strftime("%I:%M %p"),
-            font=ctk.CTkFont(size=11),
+            font=self.font(11),
             text_color=self.c_subtext
         )
         self.time_lbl.pack(side="left")
@@ -607,7 +683,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.update_discord_preview()
 
         # 2. File Queue Visualizer Card
-        queue_card = self.create_card(self.right_col, "FILE QUEUE & THUMBNAILS")
+        queue_card = self.create_card(self.right_col, "FILE TRANSMISSION QUEUE (ALL QUEUED ASSETS)")
         queue_card.pack(fill="both", expand=True, pady=(0, 8))
 
         self.queue_scroll = ctk.CTkScrollableFrame(
@@ -621,7 +697,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.queue_empty_lbl = ctk.CTkLabel(
             self.queue_scroll,
             text="No files in queue. Select a folder on the left.",
-            font=ctk.CTkFont(size=12),
+            font=self.font(12),
             text_color=self.c_subtext
         )
         self.queue_empty_lbl.pack(pady=20)
@@ -636,7 +712,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         ctk.CTkLabel(
             log_head,
             text="Live Transmission Stream",
-            font=ctk.CTkFont(size=11),
+            font=self.font(11),
             text_color=self.c_subtext
         ).pack(side="left")
 
@@ -647,7 +723,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             height=24,
             fg_color=self.c_input,
             hover_color=self.c_card_border,
-            font=ctk.CTkFont(size=10),
+            font=self.font(10),
             corner_radius=6,
             command=self.clear_log
         ).pack(side="right")
@@ -669,7 +745,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
         self.log_textbox.tag_config("INFO", foreground=self.c_blurple)
         self.log_textbox.tag_config("TIME", foreground="#72767D")
 
-        self.log("INFO", "BulkCord Uploader initialized and ready.")
+        self.log("INFO", "BulkCord Uploader engine ready. High-DPI mode active.")
 
     def create_card(self, parent, title: str):
         card = ctk.CTkFrame(
@@ -684,13 +760,13 @@ class DiscordBulkUploaderApp(ctk.CTk):
         title_lbl = ctk.CTkLabel(
             card,
             text=title,
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=self.font(11, "bold"),
             text_color=self.c_subtext
         )
         title_lbl.pack(anchor="w", padx=14, pady=(10, 4))
         return card
 
-    # ================= LOGGING & QUEUE =================
+    # ================= LOGGING & CONSOLE =================
     def log(self, level: str, message: str):
         t_str = time.strftime("%H:%M:%S")
         self.log_queue.put((level, t_str, message))
@@ -726,7 +802,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             return f"Bot {token}"
         return token
 
-    # ================= DISCORD API VERIFICATION =================
+    # ================= DISCORD VERIFICATION =================
     def test_token(self):
         auth = self.get_auth_header()
         if not auth:
@@ -749,7 +825,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
                     role = "Bot" if is_bot else "User"
                     self.authenticated_user = f"{name} ({role})"
                     self.auth_badge.configure(
-                        text=f"✓ Authenticated as {name} [{role}]",
+                        text=f"✓ Authenticated: {name} [{role}]",
                         text_color=self.c_green
                     )
                     self.preview_user_lbl.configure(text=name)
@@ -889,9 +965,13 @@ class DiscordBulkUploaderApp(ctk.CTk):
             self.update_discord_preview()
             return
 
-        all_entries = os.listdir(folder)
-        filt = self.filter_var.get()
+        try:
+            all_entries = os.listdir(folder)
+        except Exception as e:
+            self.log("ERROR", f"Cannot read directory: {e}")
+            return
 
+        filt = self.filter_var.get()
         if "All Images" in filt:
             valid_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
             files = [f for f in all_entries if os.path.splitext(f)[1].lower() in valid_exts]
@@ -904,6 +984,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         files.sort(key=natural_sort_key)
         self.loaded_files = files
+        self.total_files_count = len(files)
 
         total_bytes = 0
         for f in files:
@@ -914,9 +995,10 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         mb = total_bytes / (1024 * 1024)
         self.file_stats_lbl.configure(
-            text=f"✓ Found {len(files)} files ({mb:.2f} MB total). Sorted naturally (001 -> {len(files):03d}).",
+            text=f"✓ Found {len(files)} files ({mb:.2f} MB total). Naturally sorted.",
             text_color=self.c_green if files else self.c_yellow
         )
+        self.hud_sent.configure(text=f"📦 Sent: 0 / {len(files)}")
 
         self.rebuild_queue_ui()
         self.update_discord_preview()
@@ -942,7 +1024,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             self.queue_empty_lbl = ctk.CTkLabel(
                 self.queue_scroll,
                 text="No files in queue. Select a folder on the left.",
-                font=ctk.CTkFont(size=12),
+                font=self.font(12),
                 text_color=self.c_subtext
             )
             self.queue_empty_lbl.pack(pady=20)
@@ -950,26 +1032,24 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         folder = self.folder_var.get().strip()
 
-        # Display up to first 60 items in visual queue for smoothness
-        display_count = min(len(self.loaded_files), 60)
-        for i in range(display_count):
-            filename = self.loaded_files[i]
+        # Render rows for ALL loaded files so user can observe upcoming and completed items
+        for i, filename in enumerate(self.loaded_files):
             full_path = os.path.join(folder, filename)
 
             row = ctk.CTkFrame(
                 self.queue_scroll,
                 fg_color="#232428",
                 corner_radius=6,
-                height=42
+                height=38
             )
             row.pack(fill="x", pady=2, padx=4)
 
-            # Thumbnail
-            thumb = self.get_thumbnail(full_path, size=(36, 36))
+            # Thumbnail or generic document icon
+            thumb = self.get_thumbnail(full_path, size=(28, 28))
             if thumb:
-                img_lbl = ctk.CTkLabel(row, image=thumb, text="", width=36, height=36)
+                img_lbl = ctk.CTkLabel(row, image=thumb, text="", width=30, height=30)
             else:
-                img_lbl = ctk.CTkLabel(row, text="📄", width=36, height=36)
+                img_lbl = ctk.CTkLabel(row, text="📄", width=30, height=30, font=self.font(12))
             img_lbl.pack(side="left", padx=6)
 
             # Filename & size
@@ -982,7 +1062,7 @@ class DiscordBulkUploaderApp(ctk.CTk):
             info_lbl = ctk.CTkLabel(
                 row,
                 text=f"{i+1:02d}. {filename}  ({sz_str})",
-                font=ctk.CTkFont(size=11),
+                font=self.font(11),
                 text_color=self.c_text
             )
             info_lbl.pack(side="left", padx=4)
@@ -991,38 +1071,39 @@ class DiscordBulkUploaderApp(ctk.CTk):
             status_pill = ctk.CTkLabel(
                 row,
                 text="Upcoming",
-                font=ctk.CTkFont(size=10, weight="bold"),
+                font=self.font(10, "bold"),
                 fg_color="#35373C",
                 text_color=self.c_subtext,
                 corner_radius=4,
-                width=65,
+                width=72,
                 height=20
             )
             status_pill.pack(side="right", padx=8)
 
-            self.queue_item_widgets[i] = (row, status_pill)
+            self.queue_item_widgets[i] = (row, status_pill, info_lbl)
 
-        if len(self.loaded_files) > display_count:
-            extra = len(self.loaded_files) - display_count
-            ctk.CTkLabel(
-                self.queue_scroll,
-                text=f"... and {extra} more files queued in order",
-                font=ctk.CTkFont(size=11),
-                text_color=self.c_subtext
-            ).pack(pady=4)
+    def scroll_to_queue_index(self, idx: int):
+        """Auto-scroll the queue visualizer so the active uploading batch remains in view."""
+        try:
+            total = len(self.loaded_files)
+            if total > 0 and hasattr(self.queue_scroll, "_parent_canvas"):
+                fraction = max(0.0, min(1.0, (idx - 1) / max(1, total)))
+                self.queue_scroll._parent_canvas.yview_moveto(fraction)
+        except Exception:
+            pass
 
-    # ================= DISCORD MESSAGE LIVE PREVIEW =================
+    # ================= DISCORD MESSAGE LIVE MOSAIC PREVIEW =================
     def on_batch_size_changed(self, value: str):
         val = int(value)
         self.batch_val_lbl.configure(text=f"{val} files / msg")
         if len(self.loaded_files) > 0:
             total_msgs = (len(self.loaded_files) + val - 1) // val
             self.batch_expl_lbl.configure(
-                text=f"⚡ Batches {len(self.loaded_files)} files into {total_msgs} Discord messages (saves {(len(self.loaded_files)-total_msgs)} API calls)."
+                text=f"⚡ Batches into {total_msgs} Discord messages. Next batch slices {val} files automatically."
             )
         else:
             self.batch_expl_lbl.configure(
-                text=f"⚡ Groups {val} files into a single Discord message attachment mosaic."
+                text=f"⚡ Groups {val} files per message. Mid-upload adjustments apply to the next batch."
             )
         self.update_discord_preview()
 
@@ -1036,6 +1117,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             self.delay_val_lbl.configure(text=f"{v}s (🐢 Conservative)", text_color=self.c_blurple)
 
     def update_discord_preview(self):
+        """Renders Discord's exact client image mosaic grouping logic:
+        Bottom rows are grouped into 3s; top row expands with the remainder."""
         for widget in self.mosaic_frame.winfo_children():
             widget.destroy()
 
@@ -1044,96 +1127,143 @@ class DiscordBulkUploaderApp(ctk.CTk):
         except Exception:
             batch_size = 4
 
+        layout = DISCORD_MOSAIC_LAYOUTS.get(batch_size, [batch_size])
         folder = self.folder_var.get().strip()
         sample_files = self.loaded_files[:batch_size] if self.loaded_files else []
 
-        # Discord Grid Container
-        grid_container = ctk.CTkFrame(self.mosaic_frame, fg_color="transparent")
-        grid_container.pack(fill="x", pady=4)
+        file_idx = 0
+        num_rows = len(layout)
 
-        if batch_size == 1:
-            # Single large image layout
-            item = ctk.CTkFrame(grid_container, fg_color="#232428", corner_radius=8)
-            item.pack(fill="x", pady=2)
+        # Dynamic row sizing to fit the Discord card cleanly
+        if num_rows == 1:
+            row_height = 140 if layout[0] == 1 else 115
+            thumb_size = (120, 100) if layout[0] == 1 else (95, 80)
+        elif num_rows == 2:
+            row_height = 85
+            thumb_size = (70, 58)
+        elif num_rows == 3:
+            row_height = 65
+            thumb_size = (50, 42)
+        else:  # 4 rows (10 files)
+            row_height = 50
+            thumb_size = (36, 32)
 
-            fpath = os.path.join(folder, sample_files[0]) if sample_files else None
-            thumb = self.get_thumbnail(fpath, size=(160, 160)) if fpath else None
+        for r_idx, cols_in_row in enumerate(layout):
+            row_frame = ctk.CTkFrame(self.mosaic_frame, fg_color="transparent")
+            row_frame.pack(fill="x", pady=2)
 
-            if thumb:
-                ctk.CTkLabel(item, image=thumb, text="").pack(pady=8)
-            else:
-                ctk.CTkLabel(item, text="🖼️ [Single Attachment Preview]", font=ctk.CTkFont(size=14), text_color=self.c_subtext).pack(pady=35)
+            for c_idx in range(cols_in_row):
+                row_frame.grid_columnconfigure(c_idx, weight=1)
 
-            name = sample_files[0] if sample_files else "sample_file.png"
-            ctk.CTkLabel(item, text=name, font=ctk.CTkFont(size=11), text_color=self.c_text).pack(pady=(0, 6))
+                cell = ctk.CTkFrame(
+                    row_frame,
+                    fg_color="#232428",
+                    corner_radius=6,
+                    border_width=1,
+                    border_color="#383A40",
+                    height=row_height
+                )
+                cell.grid(row=0, column=c_idx, padx=2, pady=0, sticky="nsew")
 
-        elif batch_size in (2, 3, 4):
-            # 2-column or 2x2 grid (Standard Discord layout)
-            cols = 2
-            grid_container.grid_columnconfigure(0, weight=1)
-            grid_container.grid_columnconfigure(1, weight=1)
+                has_file = file_idx < len(sample_files)
+                fname = sample_files[file_idx] if has_file else f"img_{file_idx+1}.png"
+                fpath = os.path.join(folder, fname) if has_file else None
 
-            for i in range(batch_size):
-                r = i // cols
-                c = i % cols
+                content = ctk.CTkFrame(cell, fg_color="transparent")
+                content.pack(expand=True, fill="both", padx=3, pady=3)
 
-                item = ctk.CTkFrame(grid_container, fg_color="#232428", corner_radius=8, height=105)
-                item.grid(row=r, column=c, padx=3, pady=3, sticky="nsew")
-
-                fpath = os.path.join(folder, sample_files[i]) if i < len(sample_files) else None
-                thumb = self.get_thumbnail(fpath, size=(60, 60)) if fpath else None
-
+                thumb = self.get_thumbnail(fpath, size=thumb_size) if fpath else None
                 if thumb:
-                    ctk.CTkLabel(item, image=thumb, text="").pack(pady=(8, 2))
+                    ctk.CTkLabel(content, image=thumb, text="").pack(expand=True)
                 else:
-                    ctk.CTkLabel(item, text="🖼️", font=ctk.CTkFont(size=20)).pack(pady=(12, 2))
+                    icon = "🖼️" if has_file else "📦"
+                    ctk.CTkLabel(content, text=icon, font=self.font(16)).pack(expand=True)
 
-                name = sample_files[i] if i < len(sample_files) else f"image_{i+1}.png"
-                ctk.CTkLabel(item, text=name, font=ctk.CTkFont(size=10), text_color=self.c_text).pack(pady=(0, 6))
+                short_name = (fname[:14] + "..") if len(fname) > 16 else fname
+                ctk.CTkLabel(
+                    content,
+                    text=short_name,
+                    font=self.font(9),
+                    text_color=self.c_subtext
+                ).pack(side="bottom")
 
-        else:
-            # 5 to 10 files (Discord Multi-row mosaic)
-            cols = 4
-            for c in range(cols):
-                grid_container.grid_columnconfigure(c, weight=1)
+                file_idx += 1
 
-            for i in range(batch_size):
-                r = i // cols
-                c = i % cols
+    # ================= REAL-TIME ANIMATION, SMOOTH PROGRESS & SHADER GLOW =================
+    def animation_tick(self):
+        """Runs at ~30 FPS to smoothly extrapolate the progress bar, calculate dynamic ETA,
+        and render breathing glow animations on active transmitting components."""
+        self.anim_tick_count += 0.08
+        glow_factor = (math.sin(self.anim_tick_count * 2.8) + 1.0) / 2.0
 
-                item = ctk.CTkFrame(grid_container, fg_color="#232428", corner_radius=6, height=65)
-                item.grid(row=r, column=c, padx=2, pady=2, sticky="nsew")
+        if self.is_running and not self.is_paused:
+            # 1. Extrapolate progress smoothly within the active batch duration + delay
+            if self.total_files_count > 0:
+                elapsed_in_batch = time.time() - self.batch_start_timestamp
+                curr_delay = max(0.5, float(self.delay_slider.get()))
+                expected_cycle = self.measured_batch_duration + curr_delay
+                fraction = min(0.96, max(0.0, elapsed_in_batch / max(0.4, expected_cycle)))
 
-                fpath = os.path.join(folder, sample_files[i]) if i < len(sample_files) else None
-                thumb = self.get_thumbnail(fpath, size=(36, 36)) if fpath else None
+                extrapolated_files = self.processed_files_count + (fraction * self.current_batch_count)
+                self.extrapolated_target = min(1.0, extrapolated_files / self.total_files_count)
 
-                if thumb:
-                    ctk.CTkLabel(item, image=thumb, text="").pack(pady=(4, 1))
-                else:
-                    ctk.CTkLabel(item, text="📄", font=ctk.CTkFont(size=14)).pack(pady=(6, 1))
+                # Smoothly interpolate display progress
+                self.current_progress_display += (self.extrapolated_target - self.current_progress_display) * 0.18
+                self.progress_bar.set(self.current_progress_display)
 
-                name = (sample_files[i][:10] + "..") if i < len(sample_files) else f"{i+1}.png"
-                ctk.CTkLabel(item, text=name, font=ctk.CTkFont(size=9), text_color=self.c_subtext).pack(pady=(0, 4))
+            # 2. Dynamic ETA calculation based on remaining files, live batch size, and measured latency
+            remaining_files = max(0, self.total_files_count - self.processed_files_count)
+            live_batch_size = max(1, min(10, int(self.batch_seg.get())))
+            live_delay = max(0.5, float(self.delay_slider.get()))
+            remaining_batches = (remaining_files + live_batch_size - 1) // live_batch_size
+            eta_seconds = remaining_batches * (live_delay + self.measured_batch_duration)
+
+            self.hud_eta.configure(text=f"⏱ ETA: {format_duration(eta_seconds)}", text_color=self.c_text)
+
+            # 3. Live upload speed calculation
+            elapsed_total = max(0.1, time.time() - self.upload_start_time)
+            speed = self.processed_files_count / elapsed_total
+            self.hud_speed.configure(text=f"⚡ Speed: {speed:.1f} f/s", text_color=self.c_text)
+            self.hud_sent.configure(text=f"📦 Sent: {self.processed_files_count} / {self.total_files_count}", text_color=self.c_text)
+
+            # 4. Breathing glow animation on active queue items
+            r = int(0x58 + (0x81 - 0x58) * glow_factor)
+            g = int(0x65 + (0x8E - 0x65) * glow_factor)
+            b = int(0xF2 + (0xF8 - 0xF2) * glow_factor)
+            glow_hex = f"#{r:02x}{g:02x}{b:02x}"
+
+            for idx in self.active_batch_indices:
+                if idx in self.queue_item_widgets:
+                    _, pill, _ = self.queue_item_widgets[idx]
+                    pill.configure(fg_color=glow_hex)
+
+        elif self.is_paused:
+            self.hud_eta.configure(text="⏱ ETA: PAUSED", text_color=self.c_yellow)
+
+        self.after(35, self.animation_tick)
 
     # ================= UPLOAD ENGINE =================
     def toggle_pause(self):
         if self.pause_event.is_set():
             self.pause_event.clear()
+            self.is_paused = True
             self.pause_btn.configure(text="▶ Resume", fg_color=self.c_green, hover_color=self.c_green_hover)
-            self.status_lbl.configure(text="Status: PAUSED", text_color=self.c_yellow)
+            self.status_lbl.configure(text="Status: PAUSED (Click Resume to continue)", text_color=self.c_yellow)
             self.log("WARN", "Upload stream paused by user.")
         else:
             self.pause_event.set()
+            self.is_paused = False
             self.pause_btn.configure(text="⏸ Pause", fg_color=self.c_yellow, hover_color="#D99B26")
-            self.status_lbl.configure(text="Status: UPLOADING...", text_color=self.c_text)
+            self.status_lbl.configure(text="Status: Resuming transmission...", text_color=self.c_text)
             self.log("INFO", "Upload stream resumed.")
 
     def stop_upload(self):
         if self.upload_thread and self.upload_thread.is_alive():
             self.stop_event.set()
             self.pause_event.set()
+            self.is_paused = False
             self.status_lbl.configure(text="Status: Stopping stream...", text_color=self.c_red)
-            self.log("WARN", "Stopping after current batch completes...")
+            self.log("WARN", "Termination requested. Stopping after current batch...")
 
     def start_upload(self):
         auth = self.get_auth_header()
@@ -1151,9 +1281,8 @@ class DiscordBulkUploaderApp(ctk.CTk):
             return
 
         folder = self.folder_var.get().strip()
-        batch_size = int(self.batch_seg.get())
-        delay = float(self.delay_slider.get())
 
+        # Reset UI & State
         self.start_btn.configure(state="disabled")
         self.pause_btn.configure(state="normal", text="⏸ Pause", fg_color=self.c_yellow)
         self.stop_btn.configure(state="normal")
@@ -1161,56 +1290,82 @@ class DiscordBulkUploaderApp(ctk.CTk):
 
         self.stop_event.clear()
         self.pause_event.set()
+        self.is_running = True
+        self.is_paused = False
+        self.upload_start_time = time.time()
+        self.processed_files_count = 0
+        self.current_progress_display = 0.0
+        self.extrapolated_target = 0.0
+        self.active_batch_indices = []
 
         self.upload_thread = threading.Thread(
             target=self.worker_thread,
-            args=(auth, c_id, folder, list(self.loaded_files), batch_size, delay),
+            args=(auth, c_id, folder, list(self.loaded_files)),
             daemon=True
         )
         self.upload_thread.start()
 
-    def worker_thread(self, auth: str, channel_id: str, folder: str, files: List[str], batch_size: int, delay: float):
+    def worker_thread(self, auth: str, channel_id: str, folder: str, files: List[str]):
+        """Upload worker that dynamically responds to batch size and delay changes on every iteration."""
         import requests
         total_files = len(files)
-        # Chunk into batches
-        batches = [files[i:i + batch_size] for i in range(0, total_files, batch_size)]
-        total_batches = len(batches)
+        self.total_files_count = total_files
 
         api_url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
         headers = {"Authorization": auth}
 
-        self.log("INFO", f"=== Starting Upload of {total_files} files in {total_batches} batches (Batch Size: {batch_size}, Delay: {delay}s) ===")
+        self.log("INFO", f"=== Initializing transmission: {total_files} files queued ===")
         success_files = 0
         failed_files = 0
         processed_index = 0
+        batch_number = 0
 
-        for b_idx, batch in enumerate(batches, start=1):
-            if self.stop_event.is_set():
-                self.log("WARN", "Upload terminated by user.")
-                break
-
+        while processed_index < total_files and not self.stop_event.is_set():
+            # Check pause
             if not self.pause_event.is_set():
-                self.log("INFO", "Worker paused. Awaiting resume...")
+                self.is_paused = True
                 self.pause_event.wait()
+                self.is_paused = False
                 if self.stop_event.is_set():
                     break
 
+            # DYNAMIC: Fetch latest user-selected batch size and delay slider value on every loop!
+            try:
+                current_batch_size = max(1, min(10, int(self.batch_seg.get())))
+            except Exception:
+                current_batch_size = 4
+
+            try:
+                current_delay = max(0.5, float(self.delay_slider.get()))
+            except Exception:
+                current_delay = 2.5
+
+            batch = files[processed_index : processed_index + current_batch_size]
+            batch_len = len(batch)
+            self.current_batch_count = batch_len
+            self.batch_start_timestamp = time.time()
+            batch_number += 1
+
+            # Auto-scroll queue to the active batch
+            self.active_batch_indices = list(range(processed_index, processed_index + batch_len))
+            self.after(0, lambda idx=processed_index: self.scroll_to_queue_index(idx))
+
             batch_names = ", ".join(batch)
             self.status_lbl.configure(
-                text=f"Batch {b_idx}/{total_batches} ({processed_index+1}-{min(processed_index+len(batch), total_files)} of {total_files})...",
+                text=f"Transmitting Batch #{batch_number} ({processed_index+1}-{processed_index+batch_len} of {total_files})...",
                 text_color=self.c_text
             )
 
-            # Update Queue visual pill to "Sending..."
-            for file_offset in range(len(batch)):
-                q_idx = processed_index + file_offset
+            # Update queue pills to active "Sending..."
+            for q_idx in self.active_batch_indices:
                 if q_idx in self.queue_item_widgets:
-                    _, pill = self.queue_item_widgets[q_idx]
-                    pill.configure(text="Sending...", fg_color=self.c_blurple, text_color="#FFFFFF")
+                    _, pill, _ = self.queue_item_widgets[q_idx]
+                    pill.configure(text="● Sending", fg_color=self.c_blurple, text_color="#FFFFFF")
 
-            # Prepare multipart payload
+            # Multipart payload upload
             retries = 0
             batch_success = False
+            t_upload_start = time.time()
 
             while retries < 5 and not self.stop_event.is_set():
                 files_payload = {}
@@ -1234,10 +1389,15 @@ class DiscordBulkUploaderApp(ctk.CTk):
                         timeout=60
                     )
 
+                    upload_latency = time.time() - t_upload_start
+                    if upload_latency > 0.1:
+                        # Exponential moving average for precise dynamic ETA extrapolation
+                        self.measured_batch_duration = 0.65 * self.measured_batch_duration + 0.35 * upload_latency
+
                     if resp.status_code in (200, 201):
                         batch_success = True
-                        success_files += len(batch)
-                        self.log("SUCCESS", f"Batch {b_idx}/{total_batches} posted ({len(batch)} files: {batch_names})")
+                        success_files += batch_len
+                        self.log("SUCCESS", f"Batch #{batch_number} posted ({batch_len} files: {batch_names})")
                         break
 
                     elif resp.status_code == 429:
@@ -1247,26 +1407,27 @@ class DiscordBulkUploaderApp(ctk.CTk):
                         except Exception:
                             wait_s = 5.0
                         retries += 1
-                        self.log("WARN", f"Rate limited on Batch {b_idx}! Discord requested {wait_s:.2f}s backoff. Sleeping (Retry {retries}/5)...")
+                        self.log("WARN", f"Rate limited on Batch #{batch_number}! Backing off {wait_s:.2f}s (Retry {retries}/5)...")
+                        self.status_lbl.configure(text=f"Rate limited by Discord. Backing off for {wait_s:.1f}s...", text_color=self.c_yellow)
                         time.sleep(wait_s + 0.5)
 
                     elif resp.status_code == 403:
-                        self.log("ERROR", "403 Forbidden: Bot or account lacks write permissions in this channel.")
-                        failed_files += len(batch)
+                        self.log("ERROR", "403 Forbidden: Account lacks send permissions in this channel.")
+                        failed_files += batch_len
                         break
 
                     elif resp.status_code == 400:
-                        self.log("ERROR", f"400 Bad Request on Batch {b_idx}: {resp.text}")
-                        failed_files += len(batch)
+                        self.log("ERROR", f"400 Bad Request on Batch #{batch_number}: {resp.text}")
+                        failed_files += batch_len
                         break
 
                     else:
-                        self.log("ERROR", f"HTTP {resp.status_code} on Batch {b_idx}: {resp.text}")
+                        self.log("ERROR", f"HTTP {resp.status_code} on Batch #{batch_number}: {resp.text}")
                         retries += 1
                         time.sleep(2)
 
                 except Exception as e:
-                    self.log("ERROR", f"Network exception on Batch {b_idx}: {e}")
+                    self.log("ERROR", f"Network exception on Batch #{batch_number}: {e}")
                     retries += 1
                     time.sleep(2)
                 finally:
@@ -1276,36 +1437,50 @@ class DiscordBulkUploaderApp(ctk.CTk):
                         except Exception:
                             pass
 
-            # Update Queue visual pill to "Sent" or "Failed"
-            for file_offset in range(len(batch)):
-                q_idx = processed_index + file_offset
+            # Update queue pills to Sent or Failed
+            for q_idx in self.active_batch_indices:
                 if q_idx in self.queue_item_widgets:
-                    _, pill = self.queue_item_widgets[q_idx]
+                    _, pill, _ = self.queue_item_widgets[q_idx]
                     if batch_success:
                         pill.configure(text="✓ Sent", fg_color="#1F4733", text_color=self.c_green)
                     else:
                         pill.configure(text="✗ Failed", fg_color="#472323", text_color=self.c_red)
 
             if not batch_success and retries >= 5:
-                failed_files += len(batch)
-                self.log("ERROR", f"Batch {b_idx} failed after 5 retries. Skipping.")
+                failed_files += batch_len
+                self.log("ERROR", f"Batch #{batch_number} failed after 5 retries. Continuing next batch.")
 
-            processed_index += len(batch)
-            self.progress_bar.set(processed_index / total_files)
+            processed_index += batch_len
+            self.processed_files_count = processed_index
 
-            # Delay before next batch
-            if b_idx < total_batches and not self.stop_event.is_set():
-                time.sleep(delay)
+            # Delay before next batch (interruptible in 50ms intervals)
+            if processed_index < total_files and not self.stop_event.is_set():
+                delay_end = time.time() + current_delay
+                while time.time() < delay_end and not self.stop_event.is_set():
+                    if not self.pause_event.is_set():
+                        break
+                    time.sleep(0.05)
 
         def on_done():
+            self.is_running = False
+            self.active_batch_indices = []
+            self.progress_bar.set(1.0 if failed_files == 0 and not self.stop_event.is_set() else (self.processed_files_count / max(1, total_files)))
             self.start_btn.configure(state="normal")
             self.pause_btn.configure(state="disabled", text="⏸ Pause", fg_color=self.c_yellow)
             self.stop_btn.configure(state="disabled")
-            self.status_lbl.configure(
-                text=f"Finished: {success_files} sent, {failed_files} failed (Total: {total_files})",
-                text_color=self.c_green if failed_files == 0 else self.c_yellow
-            )
-            self.log("INFO", f"=== Completed: {success_files} files successfully sent, {failed_files} failed ===")
+
+            elapsed_str = format_duration(time.time() - self.upload_start_time)
+            self.hud_eta.configure(text=f"⏱ Done ({elapsed_str})", text_color=self.c_green)
+
+            if self.stop_event.is_set():
+                self.status_lbl.configure(text="Status: Stopped by user.", text_color=self.c_red)
+                self.log("WARN", f"=== Upload cancelled: {success_files} sent, {failed_files} failed ===")
+            else:
+                self.status_lbl.configure(
+                    text=f"✓ Complete: {success_files} sent, {failed_files} failed ({elapsed_str})",
+                    text_color=self.c_green if failed_files == 0 else self.c_yellow
+                )
+                self.log("SUCCESS", f"=== Complete: {success_files}/{total_files} files uploaded in {elapsed_str} ===")
 
         self.after(0, on_done)
 

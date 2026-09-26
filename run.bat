@@ -27,7 +27,7 @@ echo  ==========================================================================
 echo %C_CYAN%%C_BOLD%
 if exist "%~dp0assets\banner.txt" type "%~dp0assets\banner.txt"
 echo.
-echo %C_PURPLE%                        -- BULK FILE DROPPER FOR DISCORD --%C_RESET%
+echo %C_PURPLE%                                -- BULK FILE DROPPER FOR DISCORD --%C_RESET%
 echo %C_BLUE% ====================================================================================================%C_RESET%
 echo.
 
@@ -36,7 +36,28 @@ echo.
 :: ---------------------------------------------------------
 set "PY_CMD="
 
-:: 1A. Check if 'py' is on PATH
+:: 1A. Check for stable Python 3.12 / 3.11 via py launcher first
+py -3.12 -c "import sys" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "PY_CMD=py -3.12"
+    goto PYTHON_LOCATED
+)
+py -3.11 -c "import sys" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "PY_CMD=py -3.11"
+    goto PYTHON_LOCATED
+)
+
+:: 1B. Check User LocalAppData (Standard non-admin Windows install)
+for %%V in (312 311 313 310 39 38) do (
+    if exist "%LocalAppData%\Programs\Python\Python%%V\python.exe" (
+        set "PY_CMD=%LocalAppData%\Programs\Python\Python%%V\python.exe"
+        set "PATH=%LocalAppData%\Programs\Python\Python%%V;%LocalAppData%\Programs\Python\Python%%V\Scripts;!PATH!"
+        goto PYTHON_LOCATED
+    )
+)
+
+:: 1C. Check if standard 'py' or 'python' on PATH works
 where py >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     py -c "import sys" >nul 2>&1
@@ -45,22 +66,11 @@ if %ERRORLEVEL% equ 0 (
         goto PYTHON_LOCATED
     )
 )
-
-:: 1B. Check if 'python' is on PATH
 where python >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     python -c "import sys" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         set "PY_CMD=python"
-        goto PYTHON_LOCATED
-    )
-)
-
-:: 1C. Check User LocalAppData (Standard non-admin Windows install)
-for %%V in (314 313 312 311 310 39 38) do (
-    if exist "%LocalAppData%\Programs\Python\Python%%V\python.exe" (
-        set "PY_CMD=%LocalAppData%\Programs\Python\Python%%V\python.exe"
-        set "PATH=%LocalAppData%\Programs\Python\Python%%V;%LocalAppData%\Programs\Python\Python%%V\Scripts;!PATH!"
         goto PYTHON_LOCATED
     )
 )
@@ -126,9 +136,9 @@ exit /b 1
 :: ---------------------------------------------------------
 :: 2. CHECK PYTHON VERSION (3.8+)
 :: ---------------------------------------------------------
-"%PY_CMD%" -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    for /f "delims=" %%v in ('"%PY_CMD%" --version 2^>^&1') do set "DETECTED_VER=%%v"
+!PY_CMD! -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    for /f "delims=" %%v in ('!PY_CMD! --version 2^>^&1') do set "DETECTED_VER=%%v"
     echo [%DATE% %TIME%] [ERROR] Incompatible Python version: !DETECTED_VER! >> "%LOGFILE%"
     echo  %C_RED%[X] INCOMPATIBLE PYTHON VERSION: !DETECTED_VER!%C_RESET%
     echo  %C_GRAY%--------------------------------------------------------------------------------------%C_RESET%
@@ -140,7 +150,7 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-for /f "delims=" %%v in ('"%PY_CMD%" --version 2^>^&1') do set "PY_VER_STR=%%v"
+for /f "delims=" %%v in ('!PY_CMD! --version 2^>^&1') do set "PY_VER_STR=%%v"
 echo  %C_GREEN%[OK]%C_RESET% Runtime: %C_BOLD%!PY_VER_STR!%C_RESET% (using: !PY_CMD!)
 
 REM ---------------------------------------------------------
@@ -152,12 +162,12 @@ echo  %C_GREEN%[OK]%C_RESET% Storage: Sufficient drive capacity verified.
 REM ---------------------------------------------------------
 REM 4. CHECK & AUTO-INSTALL DEPENDENCIES
 REM ---------------------------------------------------------
-"%PY_CMD%" -c "import sys, customtkinter, requests, PIL; sys.exit(0)" >nul 2>&1
+!PY_CMD! -c "import sys, customtkinter, requests, PIL; sys.exit(0)" >nul 2>&1
 if !ERRORLEVEL! neq 0 (
     echo  %C_YELLOW%[*] Missing packages detected. Automatically installing requirements...%C_RESET%
     echo [%DATE% %TIME%] [INFO] Missing requirements. Running pip install -r requirements.txt... >> "%LOGFILE%"
     
-    "%PY_CMD%" -m pip install -r requirements.txt >> "%LOGFILE%" 2>&1
+    !PY_CMD! -m pip install -r requirements.txt >> "%LOGFILE%" 2>&1
     
     if !ERRORLEVEL! neq 0 (
         echo  %C_RED%[X] ERROR: Failed to install requirements via pip.%C_RESET%
@@ -204,14 +214,14 @@ echo.
 echo  %C_GREEN%[>] Starting BulkCord Uploader GUI...%C_RESET%
 echo [%DATE% %TIME%] [INFO] Launching BulkCord Uploader via !PY_CMD!... >> "%LOGFILE%"
 
-"%PY_CMD%" app.py
-set "APP_ERR=%ERRORLEVEL%"
+!PY_CMD! app.py
+set "APP_ERR=!ERRORLEVEL!"
 
-if %APP_ERR% neq 0 (
-    echo [%DATE% %TIME%] [CRASH] Application exited with error code %APP_ERR%. >> "%LOGFILE%"
+if !APP_ERR! neq 0 (
+    echo [%DATE% %TIME%] [CRASH] Application exited with error code !APP_ERR!. >> "%LOGFILE%"
     echo.
     echo %C_RED% ====================================================================================================
-    echo  [X] APPLICATION CRASHED OR EXITED UNEXPECTEDLY (Code: %APP_ERR%)
+    echo  [X] APPLICATION CRASHED OR EXITED UNEXPECTEDLY (Code: !APP_ERR!)
     echo  Check "%LOGFILE%" for stack trace and error logs.
     echo ====================================================================================================%C_RESET%
     echo.
@@ -228,8 +238,8 @@ exit /b 0
 :REINSTALL_REQ
 echo.
 echo  %C_YELLOW%[*] Upgrading and reinstalling dependencies...%C_RESET%
-"%PY_CMD%" -m pip install --upgrade pip
-"%PY_CMD%" -m pip install --upgrade -r requirements.txt
+!PY_CMD! -m pip install --upgrade pip
+!PY_CMD! -m pip install --upgrade -r requirements.txt
 echo.
 echo  %C_GREEN%[OK] Finished!%C_RESET%
 pause
