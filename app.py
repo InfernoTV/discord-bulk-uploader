@@ -46,7 +46,7 @@ def extract_channel_and_guild(input_str: str) -> Tuple[Optional[str], Optional[s
     return channel_id, guild_id
 
 
-def make_base64_thumbnail(full_path: str, max_size: Tuple[int, int] = (100, 100)) -> Optional[str]:
+def make_base64_thumbnail(full_path: str, max_size: Tuple[int, int] = (120, 120)) -> Optional[str]:
     """Generates an optimized in-memory base64 thumbnail for quick client rendering."""
     try:
         with Image.open(full_path) as im:
@@ -56,7 +56,7 @@ def make_base64_thumbnail(full_path: str, max_size: Tuple[int, int] = (100, 100)
                 im.save(buf, format='PNG', optimize=True)
                 mime = 'image/png'
             else:
-                im.convert('RGB').save(buf, format='JPEG', quality=75)
+                im.convert('RGB').save(buf, format='JPEG', quality=80)
                 mime = 'image/jpeg'
             b64 = base64.b64encode(buf.getvalue()).decode('ascii')
             return f"data:{mime};base64,{b64}"
@@ -65,29 +65,36 @@ def make_base64_thumbnail(full_path: str, max_size: Tuple[int, int] = (100, 100)
 
 
 class DiscordUploaderAPI:
-    """Python backend bridge exposed to the PyWebView JavaScript runtime."""
+    """Python backend bridge exposed to the PyWebView JavaScript runtime.
+    NOTE: All internal window / engine variables MUST start with '_' so that
+    pywebview does not recursively introspect WinForms/AccessibilityObject.
+    """
 
     def __init__(self):
-        self.window: Optional[webview.Window] = None
-        self.stop_event = threading.Event()
-        self.pause_event = threading.Event()
-        self.pause_event.set()
-        self.upload_thread: Optional[threading.Thread] = None
+        self._window: Optional[webview.Window] = None
+        self._stop_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()
+        self._upload_thread: Optional[threading.Thread] = None
 
-        self.current_batch_size = 4
-        self.current_delay = 2.5
-        self.current_files: List[Dict] = []
-        self.current_folder = ""
+        self._current_batch_size = 4
+        self._current_delay = 2.5
+        self._current_files: List[Dict] = []
+        self._current_folder = ""
+
+    def _eval_js(self, script: str):
+        """Safely evaluate JS on the main webview window."""
+        try:
+            win = self._window or (webview.windows[0] if webview.windows else None)
+            if win:
+                win.evaluate_js(script)
+        except Exception:
+            pass
 
     def log(self, level: str, message: str):
         """Sends a structured log message to the frontend console."""
         t_str = time.strftime("%H:%M:%S")
-        if self.window:
-            js = f"window.onLog({json.dumps(level)}, {json.dumps(t_str)}, {json.dumps(message)});"
-            try:
-                self.window.evaluate_js(js)
-            except Exception:
-                pass
+        self._eval_js(f"window.onLog({json.dumps(level)}, {json.dumps(t_str)}, {json.dumps(message)});")
 
     def verify_token(self, token: str, is_bot: bool) -> Dict:
         token = token.strip()
@@ -183,10 +190,11 @@ class DiscordUploaderAPI:
 
     def select_folder_dialog(self) -> Optional[str]:
         """Opens native Windows folder selection dialog."""
-        if not self.window:
+        win = self._window or (webview.windows[0] if webview.windows else None)
+        if not win:
             return None
         try:
-            result = self.window.create_file_dialog(webview.FileDialog.FOLDER)
+            result = win.create_file_dialog(webview.FileDialog.FOLDER)
             if result and len(result) > 0:
                 return result[0]
             return None
@@ -216,7 +224,7 @@ class DiscordUploaderAPI:
             filenames = [f for f in entries if os.path.isfile(os.path.join(folder, f))]
 
         filenames.sort(key=natural_sort_key)
-        self.current_folder = folder
+        self._current_folder = folder
 
         file_list = []
         total_bytes = 0
@@ -226,7 +234,6 @@ class DiscordUploaderAPI:
             try:
                 sz = os.path.getsize(p)
                 total_bytes += sz
-                # Generate base64 thumbnail for fast rendering
                 thumb = make_base64_thumbnail(p)
                 file_list.append({
                     "name": f,
@@ -237,7 +244,7 @@ class DiscordUploaderAPI:
             except Exception:
                 continue
 
-        self.current_files = file_list
+        self._current_files = file_list
         return {
             "success": True,
             "total_mb": total_bytes / (1024 * 1024),
@@ -246,23 +253,23 @@ class DiscordUploaderAPI:
 
     def update_batch_size(self, size: int):
         """Dynamic mid-upload batch resizing: changes take effect on the very next batch!"""
-        self.current_batch_size = max(1, min(10, int(size)))
+        self._current_batch_size = max(1, min(10, int(size)))
 
     def update_delay(self, delay: float):
         """Dynamic delay adjustment: immediately updates between-batch pauses."""
-        self.current_delay = max(0.5, float(delay))
+        self._current_delay = max(0.5, float(delay))
 
     def pause_upload(self):
-        self.pause_event.clear()
+        self._pause_event.clear()
         self.log("WARN", "Upload stream paused by user.")
 
     def resume_upload(self):
-        self.pause_event.set()
+        self._pause_event.set()
         self.log("INFO", "Upload stream resumed.")
 
     def stop_upload(self):
-        self.stop_event.set()
-        self.pause_event.set()
+        self._stop_event.set()
+        self._pause_event.set()
         self.log("WARN", "Upload stream stop requested. Terminating...")
 
     def start_upload(self, config: Dict):
@@ -272,24 +279,24 @@ class DiscordUploaderAPI:
         channel_input = config.get("channel_id", "").strip()
         channel_id, _ = extract_channel_and_guild(channel_input)
 
-        if not token or not channel_id or not self.current_files:
+        if not token or not channel_id or not self._current_files:
             self.log("ERROR", "Invalid configuration parameters for transmission.")
             return
 
-        self.current_batch_size = int(config.get("batch_size", 4))
-        self.current_delay = float(config.get("delay", 2.5))
+        self._current_batch_size = int(config.get("batch_size", 4))
+        self._current_delay = float(config.get("delay", 2.5))
 
         auth = f"Bot {token}" if is_bot and not token.lower().startswith("bot ") else token
 
-        self.stop_event.clear()
-        self.pause_event.set()
+        self._stop_event.clear()
+        self._pause_event.set()
 
-        self.upload_thread = threading.Thread(
+        self._upload_thread = threading.Thread(
             target=self._worker_loop,
-            args=(auth, channel_id, self.current_folder, list(self.current_files)),
+            args=(auth, channel_id, self._current_folder, list(self._current_files)),
             daemon=True
         )
-        self.upload_thread.start()
+        self._upload_thread.start()
 
     def _worker_loop(self, auth: str, channel_id: str, folder: str, file_entries: List[Dict]):
         total_files = len(file_entries)
@@ -303,16 +310,16 @@ class DiscordUploaderAPI:
         batch_number = 0
         t_global_start = time.time()
 
-        while processed_index < total_files and not self.stop_event.is_set():
+        while processed_index < total_files and not self._stop_event.is_set():
             # Check pause
-            if not self.pause_event.is_set():
-                self.pause_event.wait()
-                if self.stop_event.is_set():
+            if not self._pause_event.is_set():
+                self._pause_event.wait()
+                if self._stop_event.is_set():
                     break
 
             # DYNAMIC: Fetch latest user-selected batch size and delay on every loop!
-            batch_size = self.current_batch_size
-            delay = self.current_delay
+            batch_size = self._current_batch_size
+            delay = self._current_delay
 
             batch = file_entries[processed_index : processed_index + batch_size]
             batch_len = len(batch)
@@ -320,17 +327,16 @@ class DiscordUploaderAPI:
             batch_indices = list(range(processed_index, processed_index + batch_len))
 
             # Notify frontend of batch start
-            if self.window:
-                self.window.evaluate_js(
-                    f"window.onBatchStart({batch_number}, {processed_index}, {batch_len}, {total_files}, 0);"
-                )
+            self._eval_js(
+                f"window.onBatchStart({batch_number}, {processed_index}, {batch_len}, {total_files}, 0);"
+            )
 
             batch_names = ", ".join([f["name"] for f in batch])
             retries = 0
             batch_success = False
             t_upload_start = time.time()
 
-            while retries < 5 and not self.stop_event.is_set():
+            while retries < 5 and not self._stop_event.is_set():
                 files_payload = {}
                 file_handles = []
 
@@ -403,27 +409,24 @@ class DiscordUploaderAPI:
 
             # Notify frontend of batch finish
             upload_latency = time.time() - t_upload_start
-            if self.window:
-                self.window.evaluate_js(
-                    f"window.onBatchEnd({json.dumps(batch_indices)}, {json.dumps(batch_success)}, {upload_latency});"
-                )
+            self._eval_js(
+                f"window.onBatchEnd({json.dumps(batch_indices)}, {json.dumps(batch_success)}, {upload_latency});"
+            )
 
             processed_index += batch_len
 
             # Interruptible delay between batches
-            if processed_index < total_files and not self.stop_event.is_set():
-                delay_end = time.time() + self.current_delay
-                while time.time() < delay_end and not self.stop_event.is_set():
-                    if not self.pause_event.is_set():
+            if processed_index < total_files and not self._stop_event.is_set():
+                delay_end = time.time() + self._current_delay
+                while time.time() < delay_end and not self._stop_event.is_set():
+                    if not self._pause_event.is_set():
                         break
                     time.sleep(0.05)
 
         total_elapsed = time.time() - t_global_start
-        if self.window:
-            self.window.evaluate_js(
-                f"window.onUploadFinished({success_files}, {failed_files}, {total_files}, {total_elapsed});"
-            )
-
+        self._eval_js(
+            f"window.onUploadFinished({success_files}, {failed_files}, {total_files}, {total_elapsed});"
+        )
         self.log("INFO", f"=== Finished: {success_files} sent, {failed_files} failed ({total_elapsed:.1f}s) ===")
 
 
@@ -440,12 +443,12 @@ def main():
         title="BulkCord Uploader",
         url=ui_path,
         js_api=api,
-        width=1320,
+        width=1340,
         height=900,
         min_size=(1080, 780),
-        background_color="#1E1F22"
+        background_color="#0A0A0D"
     )
-    api.window = window
+    api._window = window
     webview.start(debug=False)
 
 

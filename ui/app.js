@@ -1,5 +1,7 @@
 /**
  * BulkCord Uploader - High-Performance Web Frontend Engine
+ * Design: Dark Graphite / Ayran Laser UI
+ * Strictly Zero Emojis - Pure Vector SVGs
  */
 
 // Application State
@@ -49,6 +51,7 @@ const dom = {
   startBtn: document.getElementById('start-btn'),
   pauseBtn: document.getElementById('pause-btn'),
   stopBtn: document.getElementById('stop-btn'),
+  controlCard: document.getElementById('control-card'),
 
   hudEta: document.getElementById('hud-eta'),
   hudSpeed: document.getElementById('hud-speed'),
@@ -58,6 +61,7 @@ const dom = {
   progressPct: document.getElementById('progress-pct'),
   statusMsg: document.getElementById('status-msg'),
 
+  globalStatusPill: document.getElementById('global-status-pill'),
   globalStatusDot: document.getElementById('global-status-dot'),
   globalStatusText: document.getElementById('global-status-text'),
 
@@ -73,14 +77,20 @@ const dom = {
 };
 
 // ================= DISCORD CLIENT MOSAIC PREVIEW ENGINE =================
-// Exact Discord native algorithm: groups bottom into 3s, expands top row
+// Native Discord logic: groups bottom rows into triplets (3s) and expands remainder on top
 const DISCORD_MOSAIC_RULES = {
-  1: [{ span: 6, h: 160 }],
-  2: [{ span: 3, h: 120 }, { span: 3, h: 120 }],
-  3: [{ span: 6, h: 100 }, { span: 3, h: 85 }, { span: 3, h: 85 }],
-  4: [{ span: 3, h: 85 }, { span: 3, h: 85 }, { span: 3, h: 85 }, { span: 3, h: 85 }],
+  1: [{ span: 6, h: 180 }],
+  2: [{ span: 3, h: 130 }, { span: 3, h: 130 }],
+  3: [
+    { span: 6, h: 100 },
+    { span: 3, h: 85 }, { span: 3, h: 85 }
+  ],
+  4: [
+    { span: 3, h: 85 }, { span: 3, h: 85 },
+    { span: 3, h: 85 }, { span: 3, h: 85 }
+  ],
   5: [
-    { span: 3, h: 90 }, { span: 3, h: 90 }, // Top 2 big
+    { span: 3, h: 92 }, { span: 3, h: 92 }, // Top 2 big
     { span: 2, h: 72 }, { span: 2, h: 72 }, { span: 2, h: 72 } // Bottom 3
   ],
   6: [
@@ -88,25 +98,25 @@ const DISCORD_MOSAIC_RULES = {
     { span: 2, h: 72 }, { span: 2, h: 72 }, { span: 2, h: 72 }
   ],
   7: [
-    { span: 6, h: 90 }, // Top 1 big full width
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 },
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 }
+    { span: 6, h: 88 }, // Top 1 big full width
+    { span: 2, h: 64 }, { span: 2, h: 64 }, { span: 2, h: 64 },
+    { span: 2, h: 64 }, { span: 2, h: 64 }, { span: 2, h: 64 }
   ],
   8: [
-    { span: 3, h: 85 }, { span: 3, h: 85 }, // Top 2 big
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 },
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 }
+    { span: 3, h: 84 }, { span: 3, h: 84 }, // Top 2 big
+    { span: 2, h: 64 }, { span: 2, h: 64 }, { span: 2, h: 64 },
+    { span: 2, h: 64 }, { span: 2, h: 64 }, { span: 2, h: 64 }
   ],
   9: [
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 },
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 },
-    { span: 2, h: 65 }, { span: 2, h: 65 }, { span: 2, h: 65 }
+    { span: 2, h: 62 }, { span: 2, h: 62 }, { span: 2, h: 62 },
+    { span: 2, h: 62 }, { span: 2, h: 62 }, { span: 2, h: 62 },
+    { span: 2, h: 62 }, { span: 2, h: 62 }, { span: 2, h: 62 }
   ],
   10: [
-    { span: 6, h: 65 }, // Top 1 big
-    { span: 2, h: 52 }, { span: 2, h: 52 }, { span: 2, h: 52 },
-    { span: 2, h: 52 }, { span: 2, h: 52 }, { span: 2, h: 52 },
-    { span: 2, h: 52 }, { span: 2, h: 52 }, { span: 2, h: 52 }
+    { span: 6, h: 68 }, // Top 1 big
+    { span: 2, h: 54 }, { span: 2, h: 54 }, { span: 2, h: 54 },
+    { span: 2, h: 54 }, { span: 2, h: 54 }, { span: 2, h: 54 },
+    { span: 2, h: 54 }, { span: 2, h: 54 }, { span: 2, h: 54 }
   ]
 };
 
@@ -115,7 +125,7 @@ function renderDiscordMosaic() {
   const layout = DISCORD_MOSAIC_RULES[count] || [{ span: 6, h: 100 }];
   dom.discordMosaicGrid.innerHTML = '';
 
-  dom.mosaicBadge.textContent = `${count}-Item Client Mosaic`;
+  dom.mosaicBadge.textContent = `${count}-ITEM PAYLOAD MOSAIC`;
 
   const sampleFiles = state.loadedFiles.slice(0, count);
 
@@ -133,13 +143,20 @@ function renderDiscordMosaic() {
       tile.appendChild(img);
 
       const label = document.createElement('div');
-      label.className = 'mosaic-tile-name';
+      label.className = 'mosaic-tile-name font-mono';
       label.textContent = file.name;
       tile.appendChild(label);
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'mosaic-tile-placeholder';
-      placeholder.innerHTML = `<span class="placeholder-icon">🖼️</span><span style="font-size:10px">${file ? file.name : `img_${i+1}.png`}</span>`;
+      placeholder.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+          <circle cx="9" cy="9" r="2"/>
+          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+        </svg>
+        <span class="placeholder-text font-mono">${file ? file.name : `payload_${i+1}.png`}</span>
+      `;
       tile.appendChild(placeholder);
     }
 
@@ -152,14 +169,19 @@ function renderQueueList() {
   if (!state.loadedFiles || state.loadedFiles.length === 0) {
     dom.queueList.innerHTML = `
       <div class="queue-empty-state">
-        <div class="empty-icon">📁</div>
-        <p>No files loaded. Select or drag a folder above.</p>
+        <div class="empty-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <p class="font-mono">NO ASSETS LOADED</p>
+        <span class="empty-subtext">Select a folder on the left to queue files</span>
       </div>`;
-    dom.queueCountBadge.textContent = '0 Assets';
+    dom.queueCountBadge.textContent = '0 ASSETS';
     return;
   }
 
-  dom.queueCountBadge.textContent = `${state.loadedFiles.length} Assets`;
+  dom.queueCountBadge.textContent = `${state.loadedFiles.length} ASSETS`;
   dom.queueList.innerHTML = '';
 
   const frag = document.createDocumentFragment();
@@ -171,17 +193,22 @@ function renderQueueList() {
 
     const thumbHtml = file.thumb
       ? `<img src="${file.thumb}" class="queue-thumb" alt="" />`
-      : `<div class="queue-thumb-doc">📄</div>`;
+      : `<div class="queue-thumb-doc">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </div>`;
 
     row.innerHTML = `
       <div class="queue-item-left">
         ${thumbHtml}
         <div class="queue-meta">
-          <span class="queue-filename">${idx + 1}. ${file.name}</span>
-          <span class="queue-filesize">${file.size_kb.toFixed(1)} KB</span>
+          <span class="queue-filename">${idx + 1}. ${escapeHtml(file.name)}</span>
+          <span class="queue-filesize font-mono">${file.size_kb.toFixed(1)} KB</span>
         </div>
       </div>
-      <span class="queue-pill upcoming" id="queue-pill-${idx}">Upcoming</span>
+      <span class="queue-pill upcoming" id="queue-pill-${idx}">QUEUED</span>
     `;
 
     frag.appendChild(row);
@@ -201,34 +228,33 @@ function updateQueueItemState(idx, status) {
   if (status === 'sending') {
     row.classList.add('active');
     pill.classList.add('sending');
-    pill.textContent = '● Sending';
+    pill.textContent = 'TRANSMITTING';
   } else if (status === 'sent') {
     pill.classList.add('sent');
-    pill.textContent = '✓ Sent';
+    pill.textContent = 'COMPLETED';
   } else if (status === 'failed') {
     pill.classList.add('failed');
-    pill.textContent = '✗ Failed';
+    pill.textContent = 'FAILED';
   } else {
     pill.classList.add('upcoming');
-    pill.textContent = 'Upcoming';
+    pill.textContent = 'QUEUED';
   }
 }
 
 function scrollToQueueIndex(idx) {
   const target = document.getElementById(`queue-item-${idx}`);
   if (target && dom.queueList) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
 // ================= REAL-TIME 60 FPS TELEMETRY & SMOOTH EXTRAPOLATION =================
 function formatDuration(sec) {
-  if (sec <= 0 || !isFinite(sec)) return '0s';
+  if (sec <= 0 || !isFinite(sec)) return '00:00';
   const s = Math.ceil(sec);
-  if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   const rem = s % 60;
-  return `${m}m ${rem < 10 ? '0' : ''}${rem}s`;
+  return `${m < 10 ? '0' : ''}${m}:${rem < 10 ? '0' : ''}${rem}`;
 }
 
 function telemetryTick() {
@@ -306,7 +332,7 @@ window.onBatchStart = function(batchNum, startIdx, batchCount, totalFiles, etaSe
   }
 
   scrollToQueueIndex(startIdx);
-  dom.statusMsg.textContent = `Transmitting Batch #${batchNum} (${startIdx + 1}-${startIdx + batchCount} of ${totalFiles})...`;
+  dom.statusMsg.textContent = `TRANSMITTING BATCH #${batchNum} (${startIdx + 1}-${startIdx + batchCount} OF ${totalFiles})...`;
 };
 
 window.onBatchEnd = function(batchIndices, success, batchLatency) {
@@ -326,19 +352,42 @@ window.onUploadFinished = function(successCount, failedCount, totalFiles, elapse
   state.isPaused = false;
   dom.startBtn.disabled = false;
   dom.pauseBtn.disabled = true;
-  dom.pauseBtn.textContent = '⏸ Pause';
+  setPauseButtonMode(false);
   dom.stopBtn.disabled = true;
+  dom.controlCard.classList.remove('active-transmitting');
 
   dom.progressFill.style.width = '100%';
   dom.progressPct.textContent = '100%';
 
   dom.globalStatusDot.className = 'status-dot success';
-  dom.globalStatusText.textContent = 'Transmission Complete';
+  dom.globalStatusText.textContent = 'SYSTEM COMPLETE';
 
   const elapsedStr = formatDuration(elapsedSec);
-  dom.hudEta.textContent = `Done (${elapsedStr})`;
-  dom.statusMsg.textContent = `✓ Complete: ${successCount} sent, ${failedCount} failed in ${elapsedStr}`;
+  dom.hudEta.textContent = `DONE (${elapsedStr})`;
+  dom.statusMsg.textContent = `COMPLETED: ${successCount} TRANSMITTED, ${failedCount} FAILED (${elapsedStr})`;
 };
+
+function setPauseButtonMode(isPaused) {
+  const span = dom.pauseBtn.querySelector('span');
+  if (isPaused) {
+    // Resume mode
+    dom.pauseBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <polygon points="6 3 20 12 6 21 6 3"/>
+      </svg>
+      <span>RESUME</span>
+    `;
+  } else {
+    // Pause mode
+    dom.pauseBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="4" width="4" height="16" rx="1"/>
+        <rect x="14" y="4" width="4" height="16" rx="1"/>
+      </svg>
+      <span>PAUSE</span>
+    `;
+  }
+}
 
 // ================= USER INTERACTION EVENT LISTENERS =================
 
@@ -346,7 +395,7 @@ window.onUploadFinished = function(successCount, failedCount, totalFiles, elapse
 dom.toggleTokenBtn.addEventListener('click', () => {
   if (dom.tokenInput.type === 'password') {
     dom.tokenInput.type = 'text';
-    dom.toggleTokenBtn.style.color = 'var(--blurple)';
+    dom.toggleTokenBtn.style.color = 'var(--accent)';
   } else {
     dom.tokenInput.type = 'password';
     dom.toggleTokenBtn.style.color = '';
@@ -358,30 +407,31 @@ dom.verifyTokenBtn.addEventListener('click', async () => {
   const token = dom.tokenInput.value.trim();
   const isBot = dom.isBotChk.checked;
   if (!token) {
-    appendLog('WARN', new Date().toLocaleTimeString(), 'Please input a token before verifying.');
+    appendLog('WARN', new Date().toLocaleTimeString(), 'Discord token required for verification.');
     return;
   }
 
+  const span = dom.verifyTokenBtn.querySelector('span');
+  if (span) span.textContent = 'CHECKING...';
   dom.verifyTokenBtn.disabled = true;
-  dom.verifyTokenBtn.textContent = 'Verifying...';
 
   try {
     const res = await window.pywebview.api.verify_token(token, isBot);
     if (res.success) {
       dom.authBadge.className = 'auth-badge verified';
-      dom.authBadgeText.textContent = `✓ ${res.username} [${res.role}]`;
+      dom.authBadgeText.textContent = `VERIFIED: ${res.username.toUpperCase()} [${res.role.toUpperCase()}]`;
       dom.discordUsername.textContent = res.username;
-      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Verified: ${res.username} (ID: ${res.id})`);
+      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Verified: ${res.username} (Snowflake ID: ${res.id})`);
     } else {
       dom.authBadge.className = 'auth-badge error';
-      dom.authBadgeText.textContent = `✗ ${res.error}`;
+      dom.authBadgeText.textContent = `FAILED: ${res.error.toUpperCase()}`;
       appendLog('ERROR', new Date().toLocaleTimeString(), `Token verification failed: ${res.error}`);
     }
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `API call error: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `API invocation error: ${err}`);
   } finally {
     dom.verifyTokenBtn.disabled = false;
-    dom.verifyTokenBtn.textContent = 'Verify Token';
+    if (span) span.textContent = 'VERIFY';
   }
 });
 
@@ -390,26 +440,26 @@ dom.verifyChanBtn.addEventListener('click', async () => {
   const token = dom.tokenInput.value.trim();
   const channel = dom.channelInput.value.trim();
   if (!token || !channel) {
-    appendLog('WARN', new Date().toLocaleTimeString(), 'Token and Channel ID/Link required.');
+    appendLog('WARN', new Date().toLocaleTimeString(), 'Discord token and channel snowflake ID required.');
     return;
   }
 
   dom.verifyChanBtn.disabled = true;
-  dom.verifyChanBtn.textContent = 'Checking...';
+  dom.verifyChanBtn.textContent = 'CHECKING...';
 
   try {
     const res = await window.pywebview.api.verify_channel(token, dom.isBotChk.checked, channel);
     if (res.success) {
       dom.channelInput.value = res.channel_id;
-      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Channel verified: #${res.channel_name} (ID: ${res.channel_id})`);
+      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Channel validated: #${res.channel_name} (${res.channel_id})`);
     } else {
       appendLog('ERROR', new Date().toLocaleTimeString(), `Channel check failed: ${res.error}`);
     }
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `Network error: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `Network request error: ${err}`);
   } finally {
     dom.verifyChanBtn.disabled = false;
-    dom.verifyChanBtn.textContent = 'Verify Channel';
+    dom.verifyChanBtn.textContent = 'CHECK';
   }
 });
 
@@ -418,12 +468,12 @@ dom.fetchChannelsBtn.addEventListener('click', async () => {
   const token = dom.tokenInput.value.trim();
   const guild = dom.guildInput.value.trim();
   if (!token || !guild) {
-    appendLog('WARN', new Date().toLocaleTimeString(), 'Token and Server ID required to fetch tree.');
+    appendLog('WARN', new Date().toLocaleTimeString(), 'Token and Server ID required to fetch channel tree.');
     return;
   }
 
   dom.fetchChannelsBtn.disabled = true;
-  dom.fetchChannelsBtn.textContent = 'Fetching...';
+  dom.fetchChannelsBtn.textContent = 'FETCHING...';
 
   try {
     const res = await window.pywebview.api.fetch_guild_channels(token, dom.isBotChk.checked, guild);
@@ -439,15 +489,15 @@ dom.fetchChannelsBtn.addEventListener('click', async () => {
       });
 
       dom.channelInput.value = res.channels[0].id;
-      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Fetched ${res.channels.length} text channels.`);
+      appendLog('SUCCESS', new Date().toLocaleTimeString(), `Discovered ${res.channels.length} text channel targets.`);
     } else {
-      appendLog('WARN', new Date().toLocaleTimeString(), res.error || 'No text channels found.');
+      appendLog('WARN', new Date().toLocaleTimeString(), res.error || 'No text channels discovered in server.');
     }
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `Error fetching server tree: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `Channel tree query error: ${err}`);
   } finally {
     dom.fetchChannelsBtn.disabled = false;
-    dom.fetchChannelsBtn.textContent = 'Fetch Channels';
+    dom.fetchChannelsBtn.textContent = 'FETCH';
   }
 });
 
@@ -466,7 +516,7 @@ dom.browseFolderBtn.addEventListener('click', async () => {
       loadFolder(folder);
     }
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `Folder picker error: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `Directory dialog error: ${err}`);
   }
 });
 
@@ -481,24 +531,24 @@ dom.filterSelect.addEventListener('change', () => {
 });
 
 async function loadFolder(folder) {
-  dom.fileSummaryText.textContent = 'Loading directory...';
+  dom.fileSummaryText.textContent = 'INDEXING DIRECTORY...';
   try {
     const filter = dom.filterSelect.value;
     const res = await window.pywebview.api.load_folder_files(folder, filter);
     if (res.success) {
       state.loadedFiles = res.files;
       state.totalFiles = res.files.length;
-      dom.fileSummaryText.textContent = `✓ ${res.files.length} files (${res.total_mb.toFixed(1)} MB)`;
+      dom.fileSummaryText.textContent = `${res.files.length} ASSETS (${res.total_mb.toFixed(1)} MB)`;
       dom.hudSent.textContent = `0 / ${res.files.length}`;
       renderDiscordMosaic();
       renderQueueList();
-      appendLog('INFO', new Date().toLocaleTimeString(), `Loaded ${res.files.length} files from ${folder}`);
+      appendLog('INFO', new Date().toLocaleTimeString(), `Indexed ${res.files.length} assets from ${folder}`);
     } else {
-      dom.fileSummaryText.textContent = 'Failed to load folder';
+      dom.fileSummaryText.textContent = 'INDEXING FAILED';
       appendLog('ERROR', new Date().toLocaleTimeString(), res.error);
     }
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `Load folder error: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `Folder load error: ${err}`);
   }
 }
 
@@ -510,13 +560,13 @@ dom.batchSegmented.querySelectorAll('button').forEach(btn => {
 
     const val = parseInt(btn.getAttribute('data-val'), 10);
     state.selectedBatchSize = val;
-    dom.batchValBadge.textContent = `${val} files / msg`;
+    dom.batchValBadge.textContent = `${val} FILES / MSG`;
 
     if (state.loadedFiles.length > 0) {
       const msgs = Math.ceil(state.loadedFiles.length / val);
-      dom.batchNote.textContent = `⚡ Groups ${state.loadedFiles.length} files into ${msgs} Discord messages (saves ${state.loadedFiles.length - msgs} API calls).`;
+      dom.batchNote.textContent = `DYNAMIC SLICING: Groups ${state.loadedFiles.length} assets into ${msgs} payload messages.`;
     } else {
-      dom.batchNote.textContent = `⚡ Groups ${val} files per Discord message. Applies dynamically mid-upload.`;
+      dom.batchNote.textContent = `DYNAMIC SLICING: Groups ${val} assets per Discord message. Applies mid-upload.`;
     }
 
     renderDiscordMosaic();
@@ -533,17 +583,17 @@ dom.delaySlider.addEventListener('input', (e) => {
   state.selectedDelay = v;
 
   if (v < 1.5) {
-    dom.delayValBadge.className = 'badge-value';
-    dom.delayValBadge.style.color = 'var(--yellow)';
-    dom.delayValBadge.textContent = `${v.toFixed(1)}s (⚠️ Aggressive)`;
+    dom.delayValBadge.className = 'badge-value font-mono';
+    dom.delayValBadge.style.color = 'var(--signal-amber)';
+    dom.delayValBadge.textContent = `${v.toFixed(1)}s (AGGRESSIVE)`;
   } else if (v <= 3.5) {
-    dom.delayValBadge.className = 'badge-value text-green';
+    dom.delayValBadge.className = 'badge-value font-mono text-accent';
     dom.delayValBadge.style.color = '';
-    dom.delayValBadge.textContent = `${v.toFixed(1)}s (🛡️ Recommended Safe)`;
+    dom.delayValBadge.textContent = `${v.toFixed(1)}s (OPTIMAL SAFE)`;
   } else {
-    dom.delayValBadge.className = 'badge-value';
-    dom.delayValBadge.style.color = 'var(--blurple)';
-    dom.delayValBadge.textContent = `${v.toFixed(1)}s (🐢 Conservative)`;
+    dom.delayValBadge.className = 'badge-value font-mono';
+    dom.delayValBadge.style.color = 'var(--text-secondary)';
+    dom.delayValBadge.textContent = `${v.toFixed(1)}s (CONSERVATIVE)`;
   }
 
   if (window.pywebview && window.pywebview.api) {
@@ -557,9 +607,9 @@ dom.startBtn.addEventListener('click', async () => {
   const channel = dom.channelInput.value.trim();
   const folder = dom.folderInput.value.trim();
 
-  if (!token) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Cannot start: Discord token required.');
-  if (!channel) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Cannot start: Destination channel required.');
-  if (!state.loadedFiles || state.loadedFiles.length === 0) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Cannot start: No files loaded.');
+  if (!token) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Abort: Discord authorization token required.');
+  if (!channel) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Abort: Destination channel snowflake ID required.');
+  if (!state.loadedFiles || state.loadedFiles.length === 0) return appendLog('ERROR', new Date().toLocaleTimeString(), 'Abort: No assets queued for transmission.');
 
   state.isUploading = true;
   state.isPaused = false;
@@ -570,11 +620,12 @@ dom.startBtn.addEventListener('click', async () => {
 
   dom.startBtn.disabled = true;
   dom.pauseBtn.disabled = false;
-  dom.pauseBtn.textContent = '⏸ Pause';
+  setPauseButtonMode(false);
   dom.stopBtn.disabled = false;
+  dom.controlCard.classList.add('active-transmitting');
 
   dom.globalStatusDot.className = 'status-dot active';
-  dom.globalStatusText.textContent = '● Transmitting';
+  dom.globalStatusText.textContent = 'TRANSMITTING';
 
   try {
     await window.pywebview.api.start_upload({
@@ -586,30 +637,30 @@ dom.startBtn.addEventListener('click', async () => {
       delay: state.selectedDelay
     });
   } catch (err) {
-    appendLog('ERROR', new Date().toLocaleTimeString(), `Transmission start failed: ${err}`);
+    appendLog('ERROR', new Date().toLocaleTimeString(), `Transmission initialization error: ${err}`);
   }
 });
 
 dom.pauseBtn.addEventListener('click', async () => {
   if (!state.isPaused) {
     state.isPaused = true;
-    dom.pauseBtn.textContent = '▶ Resume';
+    setPauseButtonMode(true);
     dom.globalStatusDot.className = 'status-dot warn';
-    dom.globalStatusText.textContent = 'Paused';
-    dom.statusMsg.textContent = 'Status: PAUSED';
+    dom.globalStatusText.textContent = 'PAUSED';
+    dom.statusMsg.textContent = 'TRANSMISSION PAUSED BY USER';
     await window.pywebview.api.pause_upload();
   } else {
     state.isPaused = false;
-    dom.pauseBtn.textContent = '⏸ Pause';
+    setPauseButtonMode(false);
     dom.globalStatusDot.className = 'status-dot active';
-    dom.globalStatusText.textContent = '● Transmitting';
-    dom.statusMsg.textContent = 'Status: Resuming transmission...';
+    dom.globalStatusText.textContent = 'TRANSMITTING';
+    dom.statusMsg.textContent = 'RESUMING TRANSMISSION STREAM...';
     await window.pywebview.api.resume_upload();
   }
 });
 
 dom.stopBtn.addEventListener('click', async () => {
-  dom.statusMsg.textContent = 'Status: Stopping stream...';
+  dom.statusMsg.textContent = 'TERMINATING TRANSMISSION STREAM...';
   await window.pywebview.api.stop_upload();
 });
 
@@ -626,5 +677,5 @@ renderDiscordMosaic();
 
 // Webview Ready Hook
 window.addEventListener('pywebviewready', () => {
-  appendLog('INFO', new Date().toLocaleTimeString(), 'BulkCord WebView2 bridge established.');
+  appendLog('INFO', new Date().toLocaleTimeString(), 'BulkCord WebView2 native bridge active.');
 });
