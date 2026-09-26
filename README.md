@@ -1,59 +1,49 @@
-# BulkCord Uploader
-
 <p align="center">
-  <img src="assets/logo.png" width="160" alt="BulkCord Uploader Logo" style="border-radius: 20px;" />
+  <img src="assets/banner.png" alt="BulkCord Banner" width="100%" />
 </p>
 
-A fast desktop tool to dump folders of images, stickers, or files into any Discord channel without getting rate limited into oblivion.
+# BulkCord Uploader
 
-Built with Python, CustomTkinter, and Pillow.
+Bulk upload folders of images, stickers, or files to any Discord channel with live previews, batch packing, and automated rate limit protection.
 
-## Why this exists
+---
 
-If you have ever tried uploading 50+ stickers, emotes, or screenshots to a Discord channel one by one, you know the pain:
-1. Discord web/desktop app lags or crashes when you drag too many files.
-2. If you automate it with basic scripts, you hit 429 rate limit errors or your account gets flagged.
-3. Discord supports up to 10 files per message (which arranges them in a clean mosaic grid), but standard scripts send 1 file per message and waste 10x more API requests.
+### Key Features
 
-BulkCord solves all of that with a clean dark-mode UI, batch grouping, visual queue previews, and automatic rate-limit backoff.
+* **Batch Packing (1 to 10 files per message):** Chunks uploads into multipart payloads using Discord's native 10-attachment limit. Sending 4 files per message creates a clean 2x2 mosaic and cuts API calls by 75%.
+* **Live Discord Render Mock:** Real-time preview showing how your files will look in the Discord client based on the selected batch size.
+* **Thumbnail Queue:** Visual queue with file sizes, naturally sorted filenames (`001`, `002`), and live progress pills (`Upcoming`, `Sending`, `Sent`).
+* **Auto 429 Defense:** Defaults to a safe 2.5s delay. If Discord flags a rate limit, the uploader reads the `Retry-After` header, pauses, and retries the batch automatically.
+* **Token Verification:** Works with Bot tokens (`Bot <token>`) and user tokens, checking identity via `/users/@me`.
+* **Channel and Server Tree:** Paste channel links directly or input a Server ID to load and select text channels from a dropdown.
 
-## Features
+---
 
-- **Batch Chunker (1 to 10 files per message):** Send files one by one or bundle them into groups of up to 10 (the Discord attachment limit). A 4-file batch renders as Discord's 2x2 grid. A 10-file batch uploads an entire 80-file pack in just 8 messages.
-- **Live Discord Message Mock:** See a preview of how Discord renders your chosen batch size before you start sending.
-- **Visual File Queue:** Scroll through real thumbnail previews of your upcoming files with real-time status badges (Upcoming, Sending, Sent).
-- **Anti-Rate-Limit Engine:** Preset to a safe 2.5s delay. If Discord returns a 429 error, the app reads Discord's exact `retry_after` response, sleeps, and retries the batch automatically.
-- **Smart Launcher (`run.bat`):** Checks your Python environment, verifies Python version (3.8+), checks available disk space, auto-installs missing dependencies via pip, and logs any crash details into `launcher.log`.
-- **Bot or User Token Support:** Works with regular Bot Tokens or user accounts. Includes a built-in token verification button that pulls your profile info.
-- **Channel Link and Tree Parser:** Paste any full Discord channel URL or raw channel ID. You can also drop your Server ID to fetch and browse the full channel hierarchy from a dropdown.
-- **Natural File Sorting:** Files named `1.png`, `2.png`, `10.png` are uploaded in actual numerical order rather than alphabetical order.
-- **Controls:** Pause, resume, or abort anytime. Real-time progress bar and color-coded transmission console.
+### Quick Start
 
-## Setup
+On Windows, double-click **`run.bat`**. It runs environment checks, auto-installs missing dependencies, and boots the app.
 
-1. Clone the repo:
-```bash
-git clone https://github.com/InfernoTV/discord-bulk-uploader.git
-cd discord-bulk-uploader
-```
-
-2. Run the launcher:
-Just double-click `run.bat` on Windows. It will verify your environment, install any missing requirements automatically, and launch the app.
-
-Alternatively, install requirements manually:
+To run manually:
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-## Quick Guide
+### Usage
 
-1. **Token:** Paste your Discord bot or user token and hit **Verify Token**.
-2. **Channel:** Paste a channel ID or copy-paste the URL straight from your Discord client (like `https://discord.com/channels/123/456`).
-3. **Folder:** Select your folder of images or files.
-4. **Batch Size:** Pick how many files to send per message (1 to 10). 4 is great for sticker grids. 10 is fastest.
-5. **Start:** Click **Start Upload** and let it run.
+1. Paste your bot or user token and click **Verify Token**.
+2. Paste the target channel link (or ID).
+3. Select your folder of images.
+4. Set batch size (4 is standard for image grids, 10 for max speed).
+5. Hit **Start Upload**.
 
-## License
+---
+
+### Technical Notes
+
+* **API Endpoint:** Sends multipart requests to `https://discord.com/api/v10/channels/{channel_id}/messages` with `files[n]` indexes and `payload_json`.
+* **Rate Limits:** Discord limits message creation to 5 requests per 5 seconds per channel. Batching up to 10 files per payload keeps you well below the threshold while drastically speeding up large sticker drops.
+
+### License
 
 MIT
