@@ -431,6 +431,11 @@ def main():
     api = DiscordUploaderAPI()
     ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "index.html")
 
+    if not os.path.exists(ui_path):
+        print(f"[ERROR] UI template not found at: {ui_path}")
+        input("Press Enter to exit...")
+        return
+
     window = webview.create_window(
         title="BulkCord Uploader",
         url=ui_path,
@@ -445,4 +450,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        print(f"\n[FATAL ERROR] {e}\n")
+        traceback.print_exc()
+        print("\n" + "=" * 60)
+        input("Press Enter to exit...")

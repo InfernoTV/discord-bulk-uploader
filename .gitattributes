@@ -1,0 +1,3 @@
+# Enforce CRLF on Windows batch files so cmd.exe can parse labels and jumps
+*.bat text eol=crlf
+*.cmd text eol=crlf

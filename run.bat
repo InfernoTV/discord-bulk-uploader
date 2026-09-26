@@ -181,9 +181,15 @@ if !ERRORLEVEL! neq 0 (
         echo  %C_GREEN%[OK]%C_RESET% Dependencies installed successfully.
     )
 ) else (
-    echo  %C_GREEN%[OK]%C_RESET% Packages: %C_CYAN%pywebview (WebView2), requests, Pillow%C_RESET% verified.
+    echo  %C_GREEN%[OK]%C_RESET% Packages: %C_CYAN%pywebview [WebView2], requests, Pillow%C_RESET% verified.
 )
 
+if "%1"=="--menu" goto SHOW_MENU
+if "%1"=="menu" goto SHOW_MENU
+
+goto LAUNCH_APP
+
+:SHOW_MENU
 echo.
 echo %C_BLUE% ----------------------------------------------------------------------------------------------------%C_RESET%
 echo  %C_BOLD%SELECT AN ACTION:%C_RESET%
@@ -204,7 +210,7 @@ if "%CHOICE%"=="3" goto VIEW_LOG
 if "%CHOICE%"=="4" goto OPEN_DIR
 if "%CHOICE%"=="0" exit /b 0
 
-goto MAIN_MENU
+goto SHOW_MENU
 
 :: ---------------------------------------------------------
 :: LAUNCH APPLICATION
@@ -221,12 +227,12 @@ if !APP_ERR! neq 0 (
     echo [%DATE% %TIME%] [CRASH] Application exited with error code !APP_ERR!. >> "%LOGFILE%"
     echo.
     echo %C_RED% ====================================================================================================
-    echo  [X] APPLICATION CRASHED OR EXITED UNEXPECTEDLY (Code: !APP_ERR!)
+    echo  [X] APPLICATION CRASHED OR EXITED UNEXPECTEDLY [Code: !APP_ERR!]
     echo  Check "%LOGFILE%" for stack trace and error logs.
     echo ====================================================================================================%C_RESET%
     echo.
     pause
-    goto MAIN_MENU
+    goto SHOW_MENU
 ) else (
     echo [%DATE% %TIME%] [INFO] Application closed normally. >> "%LOGFILE%"
 )
